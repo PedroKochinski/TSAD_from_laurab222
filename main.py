@@ -20,7 +20,7 @@ def convert_to_windows(data, model):
 	for i, g in enumerate(data): 
 		if i >= w_size: w = data[i-w_size:i]
 		else: w = torch.cat([data[0].repeat(w_size-i, 1), data[0:i]])
-		windows.append(w if 'TranAD' in args.model or 'Attention' in args.model else w.view(-1))
+		windows.append(w if 'TranAD' in args.model or 'Attention' in args.model or 'iTransformer' in args.model else w.view(-1))
 	return torch.stack(windows)
 
 def load_dataset(dataset):
@@ -279,6 +279,42 @@ def backprop(epoch, model, data, dataO, optimizer, scheduler, training = True):
 				if isinstance(z, tuple): z = z[1]
 			loss = l(z, elem)[0]
 			return loss.detach().numpy(), z.detach().numpy()[0]
+	elif 'iTransformer' in model.name:
+		l = nn.MSELoss(reduction = 'none')
+		data_x = torch.DoubleTensor(data); dataset = TensorDataset(data_x, data_x)
+		bs = model.batch if training else len(data)
+		dataloader = DataLoader(dataset, batch_size = bs)
+		n = epoch + 1; w_size = model.n_window
+		l1s, l2s = [], []
+		if training:
+			for d, _ in dataloader:
+				local_bs = d.shape[0]
+				# don't invert d because we have permutation later in DataEmbedding_inverted
+				elem = d.permute(1, 0, 2)[-1, :, :].view(1, local_bs, feats)
+				if model.output_attention:
+					z = model(d)[0]
+				else:
+					z = model(d)
+				l1 = l(z, elem) if not isinstance(z, tuple) else (1 / n) * l(z[0], elem) + (1 - 1/n) * l(z[1], elem)
+				l1s.append(torch.mean(l1).item())
+				loss = torch.mean(l1)
+				optimizer.zero_grad()
+				loss.backward(retain_graph=True)
+				optimizer.step()
+			scheduler.step()
+			tqdm.write(f'Epoch {epoch},\tL1 = {np.mean(l1s)}')
+			return np.mean(l1s), optimizer.param_groups[0]['lr']
+		else:
+			for d, _ in dataloader:
+				local_bs = d.shape[0]
+				# don't invert d because we have permutation later in DataEmbedding_inverted
+				elem = d.permute(1, 0, 2)[-1, :, :].view(1, local_bs, feats)
+				if model.output_attention:
+					z = model(d)[0]
+				else:
+					z = model(d)
+			loss = l(z, elem)[0]  # because we didn't permute tensor as done for TranAD
+			return loss.detach().numpy(), z.detach().numpy()[0]
 	else:
 		y_pred = model(data)
 		loss = l(y_pred, data)
@@ -301,7 +337,7 @@ if __name__ == '__main__':
 	## Prepare data
 	trainD, testD = next(iter(train_loader)), next(iter(test_loader))
 	trainO, testO = trainD, testD
-	if model.name in ['Attention', 'DAGMM', 'USAD', 'MSCRED', 'CAE_M', 'GDN', 'MTAD_GAT', 'MAD_GAN'] or 'TranAD' in model.name: 
+	if model.name in ['Attention', 'DAGMM', 'USAD', 'MSCRED', 'CAE_M', 'GDN', 'MTAD_GAT', 'MAD_GAN', 'iTransformer'] or 'TranAD' in model.name: 
 		trainD, testD = convert_to_windows(trainD, model), convert_to_windows(testD, model)
 
 	### Training phase
@@ -332,7 +368,9 @@ if __name__ == '__main__':
 	for i in range(loss.shape[1]):
 		lt, l, ls = lossT[:, i], loss[:, i], labels[:, i]
 		result, pred = pot_eval(lt, l, ls); preds.append(pred)
-		df = df.append(result, ignore_index=True)
+		df_res = pd.DataFrame.from_dict(result, orient='index').T
+		df = pd.concat([df, df_res], ignore_index=True)
+		# df = df.append(result, ignore_index=True)
 	# preds = np.concatenate([i.reshape(-1, 1) + 0 for i in preds], axis=1)
 	# pd.DataFrame(preds, columns=[str(i) for i in range(10)]).to_csv('labels.csv')
 	lossTfinal, lossFinal = np.mean(lossT, axis=1), np.mean(loss, axis=1)

@@ -3,6 +3,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 import statistics
 import os, torch
 import numpy as np
+import scienceplots
 
 plt.style.use(['science', 'ieee'])
 plt.rcParams["text.usetex"] = False
@@ -29,8 +30,10 @@ def plotter(name, y_true, y_pred, ascore, labels):
 		ax1.plot(smooth(y_p), '-', alpha=0.6, linewidth=0.3, label='Predicted')
 		ax3 = ax1.twinx()
 		ax3.plot(l, '--', linewidth=0.3, alpha=0.5)
-		ax3.fill_between(np.arange(l.shape[0]), l, color='blue', alpha=0.3)
-		if dim == 0: ax1.legend(ncol=2, bbox_to_anchor=(0.6, 1.02))
+		ax3.fill_between(np.arange(l.shape[0]), l, color='blue', alpha=0.3, label='Anomaly')
+		if dim == 0: 
+			ax1.legend(ncol=2, bbox_to_anchor=(0.6, 0.95))
+			ax3.legend(ncol=1, bbox_to_anchor=(0.22, 1.38))
 		ax2.plot(smooth(a_s), linewidth=0.2, color='g')
 		ax2.set_xlabel('Timestamp')
 		ax2.set_ylabel('Anomaly Score')
