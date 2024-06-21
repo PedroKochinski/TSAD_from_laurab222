@@ -3,6 +3,7 @@ import numpy as np
 from src.spot import SPOT
 from src.constants import *
 from sklearn.metrics import *
+from src.plotting import plot_metrics
 
 def calc_point2point(predict, actual):
     """
@@ -117,7 +118,7 @@ def bf_search(score, label, start, end=None, step_num=1, display_freq=1, verbose
     return m, m_t
 
 
-def pot_eval(init_score, score, label, q=1e-5, level=0.02):
+def pot_eval(init_score, score, label, path='./plots', name='pot_plot', q=1e-5, level=0.02):
     """
     Run POT method on given score.
     Args:
@@ -142,6 +143,7 @@ def pot_eval(init_score, score, label, q=1e-5, level=0.02):
     ret = s.run(dynamic=False)  # run
     # print(len(ret['alarms']))
     # print(len(ret['thresholds']))
+    s.plot(ret, f'./plots/{path}/spot', name)
     pot_th = np.mean(ret['thresholds']) * lm[1]
     # pot_th = np.percentile(score, 100 * lm[0])
     # np.percentile(score, 100 * lm[0])
@@ -149,6 +151,7 @@ def pot_eval(init_score, score, label, q=1e-5, level=0.02):
     # DEBUG - np.save(f'{debug}.npy', np.array(pred))
     # DEBUG - print(np.argwhere(np.array(pred)))
     p_t = calc_point2point(pred, label)
+    plot_metrics(f'./plots/{path}/metrics', name, y_true=label, y_pred=pred)
     # print('POT result: ', p_t, pot_th, p_latency)
     return {
         'f1': p_t[0],

@@ -542,13 +542,13 @@ class iTransformer(nn.Module):
 		self.pred_len = self.seq_len
 		self.output_attention = False
 		self.use_norm = True
-		self.d_model = 2 * feats  # 512
+		self.d_model = 2 * feats  
 		self.embed = 'TimeF'
 		self.freq = 's'
 		self.dropout = 0.1
-		self.n_heads = 8
+		self.n_heads = feats  # was done like this for other algos
 		self.e_layers = 2
-		self.d_ff =  2048
+		self.d_ff = 128 # 16
 		self.factor = 1  # attention factor
 		self.activation = 'gelu'
         # Embedding

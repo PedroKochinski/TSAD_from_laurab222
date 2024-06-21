@@ -10,6 +10,7 @@ Created on Mon Dec 12 10:08:16 2016
 
 from math import log, floor
 
+import os
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -462,7 +463,7 @@ class SPOT:
 
         return {'thresholds': th, 'alarms': alarm}
 
-    def plot(self, run_results, with_alarm=True):
+    def plot(self, run_results, path='./plots', name='pot_plot', with_alarm=True):
         """
         Plot the results of given by the run
         
@@ -482,6 +483,7 @@ class SPOT:
         """
         x = range(self.data.size)
         K = run_results.keys()
+        os.makedirs(path, exist_ok=True)
 
         ts_fig, = plt.plot(x, self.data, color=air_force_blue)
         fig = [ts_fig]
@@ -497,7 +499,8 @@ class SPOT:
             fig.append(al_fig)
 
         plt.xlim((0, self.data.size))
-
+        plt.savefig(f'{path}/{name}.png', dpi=300)
+        plt.clf()
         return fig
 
 

@@ -13,6 +13,7 @@ from torch.utils.data import Dataset, DataLoader, TensorDataset
 import torch.nn as nn
 from time import time
 from pprint import pprint
+from torchsummary import summary
 # from beepy import beep
 
 def convert_to_windows(data, model):
@@ -253,7 +254,7 @@ def backprop(epoch, model, data, dataO, optimizer, scheduler, training = True):
 		data_x = torch.DoubleTensor(data); dataset = TensorDataset(data_x, data_x)
 		bs = model.batch if training else len(data)
 		dataloader = DataLoader(dataset, batch_size = bs)
-		n = epoch + 1; w_size = model.n_window
+		n = epoch + 1
 		l1s, l2s = [], []
 		if training:
 			for d, _ in dataloader:
@@ -284,7 +285,7 @@ def backprop(epoch, model, data, dataO, optimizer, scheduler, training = True):
 		data_x = torch.DoubleTensor(data); dataset = TensorDataset(data_x, data_x)
 		bs = model.batch if training else len(data)
 		dataloader = DataLoader(dataset, batch_size = bs)
-		n = epoch + 1; w_size = model.n_window
+		n = epoch + 1
 		l1s, l2s = [], []
 		if training:
 			for d, _ in dataloader:
@@ -334,6 +335,11 @@ if __name__ == '__main__':
 		eval(f'run_{args.model.lower()}(test_loader, labels, args.dataset)')
 	model, optimizer, scheduler, epoch, accuracy_list = load_model(args.model, labels.shape[1])
 
+	# Calculate and print the number of parameters
+	total_params = sum(p.numel() for p in model.parameters())
+	trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+	print(f'total params: {total_params}, trainable params: {trainable_params}')
+
 	## Prepare data
 	trainD, testD = next(iter(train_loader)), next(iter(test_loader))
 	trainO, testO = trainD, testD
@@ -359,6 +365,7 @@ if __name__ == '__main__':
 
 	### Plot curves
 	if not args.test:
+		os.makedirs(f'./plots/{args.model}_{args.dataset}', exist_ok=True)
 		if 'TranAD' in model.name: testO = torch.roll(testO, 1, 0) 
 		plotter(f'{args.model}_{args.dataset}', testO, y_pred, loss, labels)
 
@@ -367,18 +374,21 @@ if __name__ == '__main__':
 	lossT, _ = backprop(0, model, trainD, trainO, optimizer, scheduler, training=False)
 	for i in range(loss.shape[1]):
 		lt, l, ls = lossT[:, i], loss[:, i], labels[:, i]
-		result, pred = pot_eval(lt, l, ls); preds.append(pred)
+		result, pred = pot_eval(lt, l, ls, f'{args.model}_{args.dataset}', f'dim{i}')
+		preds.append(pred)
 		df_res = pd.DataFrame.from_dict(result, orient='index').T
 		df = pd.concat([df, df_res], ignore_index=True)
-		# df = df.append(result, ignore_index=True)
-	# preds = np.concatenate([i.reshape(-1, 1) + 0 for i in preds], axis=1)
-	# pd.DataFrame(preds, columns=[str(i) for i in range(10)]).to_csv('labels.csv')
 	lossTfinal, lossFinal = np.mean(lossT, axis=1), np.mean(loss, axis=1)
 	labelsFinal = (np.sum(labels, axis=1) >= 1) + 0
-	result, _ = pot_eval(lossTfinal, lossFinal, labelsFinal)
+	plot_ascore(f'{args.model}_{args.dataset}', 'ascore', loss, labelsFinal)
+	result, _ = pot_eval(lossTfinal, lossFinal, labelsFinal, f'{args.model}_{args.dataset}', f'all_dim')
+	labelspred = adjust_predicts(lossFinal, labelsFinal, result['threshold'])
+	plot_labels(f'{args.model}_{args.dataset}', 'labels', labelspred, labelsFinal)
 	result.update(hit_att(loss, labels))
 	result.update(ndcg(loss, labels))
 	print(df)
 	pprint(result)
-	# pprint(getresults2(df, result))
-	# beep(4)
+	os.makedirs(f'./results/{args.model}_{args.dataset}', exist_ok=True)
+	df_res = pd.DataFrame.from_dict(result, orient='index').T
+	df_res.to_csv(f'./results/{args.model}_{args.dataset}/all_res.csv', index=False)
+	df.to_csv(f'./results/{args.model}_{args.dataset}/separate_results.csv', index=False)
