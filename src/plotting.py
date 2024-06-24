@@ -15,9 +15,10 @@ def smooth(y, box_pts=1):
     y_smooth = np.convolve(y, box, mode='same')
     return y_smooth
 
-def plotter(name, y_true, y_pred, ascore, labels):
-	if 'TranAD' in name: y_true = torch.roll(y_true, 1, 0)
-	pdf = PdfPages(f'plots/{name}/output.pdf')
+def plotter(path, y_true, y_pred, ascore, labels):
+	os.makedirs(path, exist_ok=True)
+	if 'TranAD' in path: y_true = torch.roll(y_true, 1, 0)
+	pdf = PdfPages(f'{path}/output.pdf')
 	for dim in range(y_true.shape[1]):
 		y_t, y_p, l, a_s = y_true[:, dim], y_pred[:, dim], labels[:, dim], ascore[:, dim]
 		fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
@@ -41,7 +42,7 @@ def plotter(name, y_true, y_pred, ascore, labels):
 	pdf.close()
 
 def plot_labels(path, name, pred_labels, true_labels):
-	os.makedirs(f'./plots/{path}', exist_ok=True)
+	os.makedirs(path, exist_ok=True)
 	fig, ax1 = plt.subplots()
 	ax1.plot(smooth(pred_labels), linewidth=0.2, color='g', label='Predicted anomaly')
 	ax3 = ax1.twinx()
@@ -50,12 +51,11 @@ def plot_labels(path, name, pred_labels, true_labels):
 	plt.legend()
 	ax1.set_xlabel('Timestamp')
 	ax1.set_ylabel('Labels')
-	plt.savefig(f'./plots/{path}/{name}.png', dpi=300)
+	plt.savefig(f'{path}/{name}.png', dpi=300)
 	plt.close()
 
 def plot_ascore(path, name, ascore, labels):
-	os.makedirs(f'./plots/{path}', exist_ok=True)
-
+	os.makedirs(path, exist_ok=True)
 	fig, axs = plt.subplots(ascore.shape[1], 1, figsize=(10,10), sharex=True, sharey=True)
 	for dim in range(ascore.shape[1]):
 		a_s = ascore[:, dim]
@@ -68,7 +68,7 @@ def plot_ascore(path, name, ascore, labels):
 	fig.supxlabel('Timestamp')
 	fig.supylabel('Anomaly Score')
 	plt.tight_layout()
-	plt.savefig(f'./plots/{path}/{name}.png', dpi=300)
+	plt.savefig(f'{path}/{name}.png', dpi=300)
 	plt.close()
 
 	fig, ax1 = plt.subplots()
@@ -83,11 +83,11 @@ def plot_ascore(path, name, ascore, labels):
 	plt.legend()
 	ax1.set_xlabel('Timestamp')
 	ax1.set_ylabel('Anomalies')
-	plt.savefig(f'./plots/{path}/{name}_withlabels.png', dpi=300)
+	plt.savefig(f'{path}/{name}_withlabels.png', dpi=300)
 	plt.close()
 
 def plot_metrics(path, name, y_true, y_pred):
-	os.makedirs(f'{path}', exist_ok=True)
+	os.makedirs(path, exist_ok=True)
 	# confusion matrix
 	cm = ConfusionMatrixDisplay.from_predictions(y_true, y_pred)
 	cm.plot()

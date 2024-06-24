@@ -43,8 +43,7 @@ def load_dataset(dataset):
 	labels = loader[2]
 	return train_loader, test_loader, labels
 
-def save_model(model, optimizer, scheduler, epoch, accuracy_list):
-	folder = f'checkpoints/{args.model}_{args.dataset}/'
+def save_model(folder, model, optimizer, scheduler, epoch, accuracy_list):
 	os.makedirs(folder, exist_ok=True)
 	file_path = f'{folder}/model.ckpt'
 	torch.save({
@@ -57,7 +56,7 @@ def save_model(model, optimizer, scheduler, epoch, accuracy_list):
 def load_model(modelname, dims):
 	import src.models
 	model_class = getattr(src.models, modelname)
-	model = model_class(dims).double()
+	model = model_class(dims, args.n_window).double()
 	optimizer = torch.optim.AdamW(model.parameters() , lr=model.lr, weight_decay=1e-5)
 	scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 5, 0.9)
 	fname = f'checkpoints/{args.model}_{args.dataset}/model.ckpt'
@@ -335,6 +334,13 @@ if __name__ == '__main__':
 		eval(f'run_{args.model.lower()}(test_loader, labels, args.dataset)')
 	model, optimizer, scheduler, epoch, accuracy_list = load_model(args.model, labels.shape[1])
 
+	# define path for results, checkpoints & plots & create directories
+	plot_path = f'{args.model}_{args.dataset}/n_window{args.n_window}/plots'
+	res_path = f'{args.model}_{args.dataset}/n_window{args.n_window}/results'
+	checkpoints_path = f'{args.model}_{args.dataset}/n_window{args.n_window}/checkpoints'
+	os.makedirs(plot_path, exist_ok=True)
+	os.makedirs(res_path, exist_ok=True)
+
 	# Calculate and print the number of parameters
 	total_params = sum(p.numel() for p in model.parameters())
 	trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -354,8 +360,8 @@ if __name__ == '__main__':
 			lossT, lr = backprop(e, model, trainD, trainO, optimizer, scheduler)
 			accuracy_list.append((lossT, lr))
 		print(color.BOLD+'Training time: '+"{:10.4f}".format(time()-start)+' s'+color.ENDC)
-		save_model(model, optimizer, scheduler, e, accuracy_list)
-		plot_accuracies(accuracy_list, f'{args.model}_{args.dataset}')
+		save_model(checkpoints_path, model, optimizer, scheduler, e, accuracy_list)
+		plot_accuracies(accuracy_list, plot_path)
 
 	### Testing phase
 	torch.zero_grad = True
@@ -365,30 +371,28 @@ if __name__ == '__main__':
 
 	### Plot curves
 	if not args.test:
-		os.makedirs(f'./plots/{args.model}_{args.dataset}', exist_ok=True)
 		if 'TranAD' in model.name: testO = torch.roll(testO, 1, 0) 
-		plotter(f'{args.model}_{args.dataset}', testO, y_pred, loss, labels)
+		plotter(plot_path, testO, y_pred, loss, labels)
 
 	### Scores
 	df = pd.DataFrame()
 	lossT, _ = backprop(0, model, trainD, trainO, optimizer, scheduler, training=False)
 	for i in range(loss.shape[1]):
 		lt, l, ls = lossT[:, i], loss[:, i], labels[:, i]
-		result, pred = pot_eval(lt, l, ls, f'{args.model}_{args.dataset}', f'dim{i}')
+		result, pred = pot_eval(lt, l, ls, plot_path, f'dim{i}')
 		preds.append(pred)
 		df_res = pd.DataFrame.from_dict(result, orient='index').T
 		df = pd.concat([df, df_res], ignore_index=True)
 	lossTfinal, lossFinal = np.mean(lossT, axis=1), np.mean(loss, axis=1)
 	labelsFinal = (np.sum(labels, axis=1) >= 1) + 0
-	plot_ascore(f'{args.model}_{args.dataset}', 'ascore', loss, labelsFinal)
-	result, _ = pot_eval(lossTfinal, lossFinal, labelsFinal, f'{args.model}_{args.dataset}', f'all_dim')
+	plot_ascore(plot_path, 'ascore', loss, labelsFinal)
+	result, _ = pot_eval(lossTfinal, lossFinal, labelsFinal, plot_path, f'all_dim')
 	labelspred = adjust_predicts(lossFinal, labelsFinal, result['threshold'])
-	plot_labels(f'{args.model}_{args.dataset}', 'labels', labelspred, labelsFinal)
+	plot_labels(plot_path, 'labels', labelspred, labelsFinal)
 	result.update(hit_att(loss, labels))
 	result.update(ndcg(loss, labels))
 	print(df)
 	pprint(result)
-	os.makedirs(f'./results/{args.model}_{args.dataset}', exist_ok=True)
 	df_res = pd.DataFrame.from_dict(result, orient='index').T
-	df_res.to_csv(f'./results/{args.model}_{args.dataset}/all_res.csv', index=False)
-	df.to_csv(f'./results/{args.model}_{args.dataset}/separate_results.csv', index=False)
+	df_res.to_csv(f'{res_path}/all_res.csv', index=False)
+	df.to_csv(f'{res_path}/separate_results.csv', index=False)

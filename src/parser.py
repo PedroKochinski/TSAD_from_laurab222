@@ -13,6 +13,12 @@ parser.add_argument('--model',
 					required=False,
 					default='LSTM_Multivariate',
                     help="model name")
+parser.add_argument('--n_window', 
+					metavar='-nw', 
+					type=int, 
+					required=False,
+					default=10,
+                    help="number of timestamps in a window")
 parser.add_argument('--test', 
 					action='store_true', 
 					help="test the model")

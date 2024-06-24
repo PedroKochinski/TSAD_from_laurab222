@@ -143,7 +143,7 @@ def pot_eval(init_score, score, label, path='./plots', name='pot_plot', q=1e-5, 
     ret = s.run(dynamic=False)  # run
     # print(len(ret['alarms']))
     # print(len(ret['thresholds']))
-    s.plot(ret, f'./plots/{path}/spot', name)
+    s.plot(ret, f'{path}/spot', name)
     pot_th = np.mean(ret['thresholds']) * lm[1]
     # pot_th = np.percentile(score, 100 * lm[0])
     # np.percentile(score, 100 * lm[0])
@@ -151,7 +151,7 @@ def pot_eval(init_score, score, label, path='./plots', name='pot_plot', q=1e-5, 
     # DEBUG - np.save(f'{debug}.npy', np.array(pred))
     # DEBUG - print(np.argwhere(np.array(pred)))
     p_t = calc_point2point(pred, label)
-    plot_metrics(f'./plots/{path}/metrics', name, y_true=label, y_pred=pred)
+    plot_metrics(f'{path}/metrics', name, y_true=label, y_pred=pred)
     # print('POT result: ', p_t, pot_th, p_latency)
     return {
         'f1': p_t[0],

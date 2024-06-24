@@ -494,13 +494,13 @@ class TranAD_SelfConditioning(nn.Module):
 
 # Proposed Model + Self Conditioning + Adversarial + MAML (VLDB 22)
 class TranAD(nn.Module):
-	def __init__(self, feats):
+	def __init__(self, feats, n_window):
 		super(TranAD, self).__init__()
 		self.name = 'TranAD'
 		self.lr = lr
-		self.batch = 128
+		self.batch = int(1280/n_window)
 		self.n_feats = feats
-		self.n_window = 10
+		self.n_window = n_window
 		self.n = self.n_feats * self.n_window
 		self.pos_encoder = PositionalEncoding(2 * feats, 0.1, self.n_window)
 		encoder_layers = TransformerEncoderLayer(d_model=2 * feats, nhead=feats, dim_feedforward=16, dropout=0.1)
@@ -529,13 +529,13 @@ class TranAD(nn.Module):
 		return x1, x2
 
 class iTransformer(nn.Module):
-	def __init__(self, feats):
+	def __init__(self, feats, n_window):
 		super(iTransformer, self).__init__()
 		self.name = 'iTransformer'
 		self.lr = lr
-		self.batch = 128
+		self.batch = 1 # int(1280/n_window)  # 128
 		self.n_feats = feats
-		self.n_window = 10
+		self.n_window = n_window
 		self.n = self.n_feats * self.n_window
 		self.seq_len = self.n_window
 		self.label_len = self.n_window
