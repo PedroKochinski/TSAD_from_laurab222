@@ -142,4 +142,6 @@ data/WADI/WADI_attackdata.csv
 .vscode/
 plots/*
 results/*
-*SMAP/*
+*_SMAP/*
+*_UCR/*
+studies/*

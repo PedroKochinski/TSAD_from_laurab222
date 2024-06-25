@@ -13,7 +13,8 @@ from torch.utils.data import Dataset, DataLoader, TensorDataset
 import torch.nn as nn
 from time import time
 from pprint import pprint
-from torchsummary import summary
+from torchinfo import summary
+
 # from beepy import beep
 
 def convert_to_windows(data, model):
@@ -260,6 +261,8 @@ def backprop(epoch, model, data, dataO, optimizer, scheduler, training = True):
 				local_bs = d.shape[0]
 				window = d.permute(1, 0, 2)
 				elem = window[-1, :, :].view(1, local_bs, feats)
+				if not l1s and n<=1: 
+					summary(model, input_data=[window, elem])
 				z = model(window, elem)
 				l1 = l(z, elem) if not isinstance(z, tuple) else (1 / n) * l(z[0], elem) + (1 - 1/n) * l(z[1], elem)
 				if isinstance(z, tuple): z = z[1]
@@ -291,6 +294,8 @@ def backprop(epoch, model, data, dataO, optimizer, scheduler, training = True):
 				local_bs = d.shape[0]
 				# don't invert d because we have permutation later in DataEmbedding_inverted
 				elem = d.permute(1, 0, 2)[-1, :, :].view(1, local_bs, feats)
+				# if not l1s: 
+				# 	summary(model, input_size=[1, 10, 25])
 				if model.output_attention:
 					z = model(d)[0]
 				else:
@@ -352,6 +357,8 @@ if __name__ == '__main__':
 	if model.name in ['Attention', 'DAGMM', 'USAD', 'MSCRED', 'CAE_M', 'GDN', 'MTAD_GAT', 'MAD_GAN', 'iTransformer'] or 'TranAD' in model.name: 
 		trainD, testD = convert_to_windows(trainD, model), convert_to_windows(testD, model)
 
+	if model.name == 'iTransformer':
+		summary(model, input_data=trainD, depth=5, verbose=1)
 	### Training phase
 	if not args.test:
 		print(f'{color.HEADER}Training {args.model} on {args.dataset}{color.ENDC}')
