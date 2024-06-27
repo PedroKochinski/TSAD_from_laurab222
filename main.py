@@ -39,6 +39,12 @@ def load_dataset(dataset):
 		loader.append(np.load(os.path.join(folder, f'{file}.npy')))
 	# loader = [i[:, debug:debug+1] for i in loader]
 	if args.less: loader[0] = cut_array(0.2, loader[0])
+
+	# # test: invert time order of data
+	# loader[0] = np.flip(loader[0], axis=0)
+	# loader[1] = np.flip(loader[1], axis=0)
+	# loader[2] = np.flip(loader[2], axis=0)
+	
 	train_loader = DataLoader(loader[0], batch_size=loader[0].shape[0])
 	test_loader = DataLoader(loader[1], batch_size=loader[1].shape[0])
 	labels = loader[2]
@@ -383,7 +389,9 @@ if __name__ == '__main__':
 
 	### Scores
 	df = pd.DataFrame()
+	df_loss = pd.DataFrame()
 	lossT, _ = backprop(0, model, trainD, trainO, optimizer, scheduler, training=False)
+	df_loss = pd.DataFrame(loss)
 	for i in range(loss.shape[1]):
 		lt, l, ls = lossT[:, i], loss[:, i], labels[:, i]
 		result, pred = pot_eval(lt, l, ls, plot_path, f'dim{i}')
@@ -392,9 +400,12 @@ if __name__ == '__main__':
 		df = pd.concat([df, df_res], ignore_index=True)
 	lossTfinal, lossFinal = np.mean(lossT, axis=1), np.mean(loss, axis=1)
 	labelsFinal = (np.sum(labels, axis=1) >= 1) + 0
+	preds = np.array(preds).T
+	preds = preds.astype(int)
+	df_labels = pd.DataFrame(preds)
+	labelspred = (np.sum(preds, axis=1) >= 1) + 0
 	plot_ascore(plot_path, 'ascore', loss, labelsFinal)
 	result, _ = pot_eval(lossTfinal, lossFinal, labelsFinal, plot_path, f'all_dim')
-	labelspred = adjust_predicts(lossFinal, labelsFinal, result['threshold'])
 	plot_labels(plot_path, 'labels', labelspred, labelsFinal)
 	result.update(hit_att(loss, labels))
 	result.update(ndcg(loss, labels))
@@ -402,4 +413,6 @@ if __name__ == '__main__':
 	pprint(result)
 	df_res = pd.DataFrame.from_dict(result, orient='index').T
 	df_res.to_csv(f'{res_path}/all_res.csv', index=False)
+	df_loss.to_csv(f'{res_path}/test_loss.csv', index=False)
+	df_labels.to_csv(f'{res_path}/pred_labels.csv', index=False)
 	df.to_csv(f'{res_path}/separate_results.csv', index=False)

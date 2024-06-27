@@ -498,7 +498,7 @@ class TranAD(nn.Module):
 		super(TranAD, self).__init__()
 		self.name = 'TranAD'
 		self.lr = lr
-		self.batch = int(1280/n_window)
+		self.batch = 1 if n_window > 1280 else int(1280 / n_window) # 128
 		self.n_feats = feats
 		self.n_window = n_window
 		self.n = self.n_feats * self.n_window
@@ -533,7 +533,7 @@ class iTransformer(nn.Module):
 		super(iTransformer, self).__init__()
 		self.name = 'iTransformer'
 		self.lr = lr
-		self.batch = 1 # int(1280/n_window)  # 128
+		self.batch = 1 if n_window > 1280 else int(1280 / n_window) # 128
 		self.n_feats = feats
 		self.n_window = n_window
 		self.n = self.n_feats * self.n_window
