@@ -43,7 +43,7 @@ def plotter(path, y_true, y_pred, ascore, labels):
 
 def plot_labels(path, name, pred_labels, true_labels):
 	os.makedirs(path, exist_ok=True)
-	fig, ax1 = plt.subplots()
+	fig, ax1 = plt.subplots(figsize=(6,2))
 	ax1.plot(smooth(pred_labels), linewidth=0.2, color='g', label='Predicted anomaly')
 	ax3 = ax1.twinx()
 	ax3.plot(true_labels, '--', linewidth=0.3, alpha=0.5)

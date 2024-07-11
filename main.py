@@ -48,6 +48,7 @@ def load_dataset(dataset):
 	train_loader = DataLoader(loader[0], batch_size=loader[0].shape[0])
 	test_loader = DataLoader(loader[1], batch_size=loader[1].shape[0])
 	labels = loader[2]
+	print('training set shape:', train_loader.dataset.shape)
 	return train_loader, test_loader, labels
 
 def save_model(folder, model, optimizer, scheduler, epoch, accuracy_list):
@@ -405,8 +406,15 @@ if __name__ == '__main__':
 	df_labels = pd.DataFrame(preds)
 	labelspred = (np.sum(preds, axis=1) >= 1) + 0
 	plot_ascore(plot_path, 'ascore', loss, labelsFinal)
-	result, _ = pot_eval(lossTfinal, lossFinal, labelsFinal, plot_path, f'all_dim')
 	plot_labels(plot_path, 'labels', labelspred, labelsFinal)
+
+	result, pred2 = pot_eval(lossTfinal, lossFinal, labelsFinal, plot_path, f'all_dim')
+	labelspred2 = (pred2 >= 1) + 0
+	plot_labels(plot_path, 'labels2', labelspred2, labelsFinal)
+
+	arr = np.where(labelspred!=labelspred2)
+	print(len(arr[0]), len(np.where(labelspred==labelspred2)[0]))
+
 	result.update(hit_att(loss, labels))
 	result.update(ndcg(loss, labels))
 	print(df)
