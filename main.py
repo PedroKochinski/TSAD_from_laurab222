@@ -350,7 +350,7 @@ if __name__ == '__main__':
 	# plot_path = f'{args.model}_{args.dataset}/n_window{args.n_window}/plots'
 	# res_path = f'{args.model}_{args.dataset}/n_window{args.n_window}/results'
 	# checkpoints_path = f'{args.model}_{args.dataset}/n_window{args.n_window}/checkpoints'
-	folder = f'studies2/{args.model}_{args.dataset}/detection_lvl_{args.q}'
+	folder = f'preprocessing/{args.model}_{args.dataset}_new'
 	plot_path = f'{folder}/plots'
 	res_path = f'{folder}/results'
 	checkpoints_path = f'{folder}/checkpoints'

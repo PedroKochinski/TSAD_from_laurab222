@@ -21,8 +21,8 @@ conda activate "/Users/lauraboggia/VSCode_projects/TranAD/.conda"
 #     python main.py --model iTransformer --n_window $i --dataset SMAP --retrain
 # done
 
-for i in 1e-3 1e-4 5e-5 1e-5 5e-6 1e-6 1e-7
-do 
-    echo "detection level: $i"
-    python main.py --model iTransformer --n_window 10 --q $i --dataset SMAP --retrain 
-done
+# for i in 0.25 0.1 0.075 0.05   #0.5 1e-2 #1e-3 1e-4 5e-5 1e-5 5e-6 1e-6 1e-7
+# do 
+#     echo "detection level: $i"
+#     python main.py --model iTransformer --n_window 10 --q $i --dataset SMAP --retrain 
+# done

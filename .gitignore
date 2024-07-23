@@ -140,8 +140,9 @@ data/WADI/WADI_attackdata.csv
 #   
 .DS_Store
 .vscode/
-plots/*
+plots*/*
 results/*
 *_SMAP/*
 *_UCR/*
 studies*/*
+preprocessing/*

@@ -38,7 +38,7 @@ def normalize2(a, min_a = None, max_a = None):
 	if min_a is None: min_a, max_a = min(a), max(a)
 	return (a - min_a) / (max_a - min_a), min_a, max_a
 
-def normalize3(a, min_a = None, max_a = None):
+def normalize3(a, min_a = 0, max_a = 1):  # min_a = None, max_a = None
 	if min_a is None: min_a, max_a = np.min(a, axis = 0), np.max(a, axis = 0)
 	return (a - min_a) / (max_a - min_a + 0.0001), min_a, max_a
 
