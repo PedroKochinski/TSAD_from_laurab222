@@ -144,4 +144,4 @@ plots/*
 results/*
 *_SMAP/*
 *_UCR/*
-studies/*
+studies*/*

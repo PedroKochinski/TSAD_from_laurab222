@@ -1,4 +1,3 @@
-import pickle
 import os
 import pandas as pd
 from tqdm import tqdm
@@ -22,7 +21,8 @@ def convert_to_windows(data, model):
 	for i, g in enumerate(data): 
 		if i >= w_size: w = data[i-w_size:i]
 		else: w = torch.cat([data[0].repeat(w_size-i, 1), data[0:i]])
-		windows.append(w if 'TranAD' in args.model or 'Attention' in args.model or 'iTransformer' in args.model else w.view(-1))
+		windows.append(w if model.name in ['TranAD', 'Attention', 'iTransformer'] else w.view(-1))
+		# windows.append(w if 'TranAD' in args.model or 'Attention' in args.model or 'iTransformer' in args.model else w.view(-1))
 	return torch.stack(windows)
 
 def load_dataset(dataset):
@@ -347,9 +347,13 @@ if __name__ == '__main__':
 	model, optimizer, scheduler, epoch, accuracy_list = load_model(args.model, labels.shape[1])
 
 	# define path for results, checkpoints & plots & create directories
-	plot_path = f'{args.model}_{args.dataset}/n_window{args.n_window}/plots'
-	res_path = f'{args.model}_{args.dataset}/n_window{args.n_window}/results'
-	checkpoints_path = f'{args.model}_{args.dataset}/n_window{args.n_window}/checkpoints'
+	# plot_path = f'{args.model}_{args.dataset}/n_window{args.n_window}/plots'
+	# res_path = f'{args.model}_{args.dataset}/n_window{args.n_window}/results'
+	# checkpoints_path = f'{args.model}_{args.dataset}/n_window{args.n_window}/checkpoints'
+	folder = f'studies2/{args.model}_{args.dataset}/detection_lvl_{args.q}'
+	plot_path = f'{folder}/plots'
+	res_path = f'{folder}/results'
+	checkpoints_path = f'{folder}/checkpoints'
 	os.makedirs(plot_path, exist_ok=True)
 	os.makedirs(res_path, exist_ok=True)
 
@@ -395,7 +399,7 @@ if __name__ == '__main__':
 	df_loss = pd.DataFrame(loss)
 	for i in range(loss.shape[1]):
 		lt, l, ls = lossT[:, i], loss[:, i], labels[:, i]
-		result, pred = pot_eval(lt, l, ls, plot_path, f'dim{i}')
+		result, pred = pot_eval(lt, l, ls, plot_path, f'dim{i}', q=args.q)
 		preds.append(pred)
 		df_res = pd.DataFrame.from_dict(result, orient='index').T
 		df = pd.concat([df, df_res], ignore_index=True)
@@ -405,18 +409,21 @@ if __name__ == '__main__':
 	preds = preds.astype(int)
 	df_labels = pd.DataFrame(preds)
 	labelspred = (np.sum(preds, axis=1) >= 1) + 0
-	plot_ascore(plot_path, 'ascore', loss, labelsFinal)
-	plot_labels(plot_path, 'labels', labelspred, labelsFinal)
+	plot_ascore(plot_path, 'ascore_local', loss, labelsFinal)
+	plot_labels(plot_path, 'labels_local', labelspred, labelsFinal)
+	plot_metrics(plot_path, 'metrics_local', labelspred, labelsFinal)
 
-	result, pred2 = pot_eval(lossTfinal, lossFinal, labelsFinal, plot_path, f'all_dim')
+	result2, pred2 = pot_eval(lossTfinal, lossFinal, labelsFinal, plot_path, f'all_dim', q=args.q)
 	labelspred2 = (pred2 >= 1) + 0
-	plot_labels(plot_path, 'labels2', labelspred2, labelsFinal)
+	plot_ascore(plot_path, 'ascore_global', lossFinal, labelsFinal)
+	plot_labels(plot_path, 'labels_global', labelspred2, labelsFinal)
+	plot_metrics(plot_path, 'metrics_global', labelspred2, labelsFinal)
 
-	arr = np.where(labelspred!=labelspred2)
-	print(len(arr[0]), len(np.where(labelspred==labelspred2)[0]))
+	compare_labels(plot_path, labels_loc=labelspred, labels_glob=labelspred2, labels=labelsFinal)
 
 	result.update(hit_att(loss, labels))
 	result.update(ndcg(loss, labels))
+	result.update({'detection level q': args.q})
 	print(df)
 	pprint(result)
 	df_res = pd.DataFrame.from_dict(result, orient='index').T

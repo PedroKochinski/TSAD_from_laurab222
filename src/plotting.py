@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import matplotlib
 from matplotlib.backends.backend_pdf import PdfPages
 import statistics
 import os, torch
@@ -6,9 +7,11 @@ import numpy as np
 from sklearn.metrics import *
 import scienceplots
 
+matplotlib.use('Agg')
 plt.style.use(['science', 'ieee'])
 plt.rcParams["text.usetex"] = False
 plt.rcParams['figure.figsize'] = 6, 2
+plt.rcParams['lines.markersize'] = 3
 
 def smooth(y, box_pts=1):
     box = np.ones(box_pts)/box_pts
@@ -44,10 +47,9 @@ def plotter(path, y_true, y_pred, ascore, labels):
 def plot_labels(path, name, pred_labels, true_labels):
 	os.makedirs(path, exist_ok=True)
 	fig, ax1 = plt.subplots(figsize=(6,2))
-	ax1.plot(smooth(pred_labels), linewidth=0.2, color='g', label='Predicted anomaly')
-	ax3 = ax1.twinx()
-	ax3.plot(true_labels, '--', linewidth=0.3, alpha=0.5)
-	ax3.fill_between(np.arange(true_labels.shape[0]), true_labels, color='blue', alpha=0.3, label='True anomaly')
+	ax1.plot(smooth(pred_labels), 'g.', label='Predicted anomaly')
+	ax1.plot(true_labels, '--', linewidth=0.3, alpha=0.2)
+	ax1.fill_between(np.arange(true_labels.shape[0]), true_labels, color='blue', alpha=0.3, label='True anomaly')
 	plt.legend()
 	ax1.set_xlabel('Timestamp')
 	ax1.set_ylabel('Labels')
@@ -56,34 +58,36 @@ def plot_labels(path, name, pred_labels, true_labels):
 
 def plot_ascore(path, name, ascore, labels):
 	os.makedirs(path, exist_ok=True)
-	fig, axs = plt.subplots(ascore.shape[1], 1, figsize=(10,10), sharex=True, sharey=True)
-	for dim in range(ascore.shape[1]):
-		a_s = ascore[:, dim]
-		if ascore.shape[1] == 1:
-			axs.plot(smooth(a_s), linewidth=0.2, color='g')
-			# axs.set_ylim(0, 1.0)
-		else:
-			axs[dim].plot(smooth(a_s), linewidth=0.2, color='g')
-			# axs[dim].set_ylim(0, 1.0)
-	fig.supxlabel('Timestamp')
-	fig.supylabel('Anomaly Score')
-	plt.tight_layout()
-	plt.savefig(f'{path}/{name}.png', dpi=300)
-	plt.close()
+	
+	if ascore.ndim != 1:
+		pdf = PdfPages(f'{path}/{name}.pdf')
+		for dim in range(ascore.shape[1]):	
+			fig, axs = plt.subplots(1, 1, figsize=(6,2))
+			axs.plot(smooth(ascore[:,dim]), 'g.')
+			ax3 = axs.twinx()
+			ax3.plot(labels, '--', linewidth=0.3, alpha=0.5)
+			ax3.fill_between(np.arange(labels.shape[0]), labels, color='blue', alpha=0.3, label='True anomaly')
+			axs.set_xlabel('Timestamp')
+			axs.set_ylabel('Anomaly score')
+			axs.set_title(f'Dimension = {dim}')
+			plt.legend(loc='center right')
+			plt.tight_layout()
+			pdf.savefig(fig)
+			plt.close()
+		pdf.close()
 
 	fig, ax1 = plt.subplots()
-	# ascore is still multidimensional, wanna reduce that but first smooth them
-	for dim in range(ascore.shape[1]):
-		ascore[:, dim] = smooth(ascore[:, dim])
-	ascore = np.mean(ascore, axis=1)
-	ax1.plot(ascore, linewidth=0.2, color='g', label='Anomaly score')
+	if ascore.ndim != 1:
+		ascore = np.mean(ascore, axis=1)
+	ax1.plot(smooth(ascore), 'g.', label='Anomaly score')
 	ax3 = ax1.twinx()
 	ax3.plot(labels, '--', linewidth=0.3, alpha=0.5)
-	ax3.fill_between(np.arange(labels.shape[0]), labels, color='blue', alpha=0.3, label='Anomaly')
-	plt.legend()
+	ax3.fill_between(np.arange(labels.shape[0]), labels, color='blue', alpha=0.2, label='True anomaly')
+	ax1.legend(ncol=1, bbox_to_anchor=(0.7, 1.0))
+	ax3.legend(ncol=1, bbox_to_anchor=(0.7, 0.9))
 	ax1.set_xlabel('Timestamp')
 	ax1.set_ylabel('Anomalies')
-	plt.savefig(f'{path}/{name}_withlabels.png', dpi=300)
+	plt.savefig(f'{path}/{name}_averaged.png', dpi=300)
 	plt.close()
 
 def plot_metrics(path, name, y_true, y_pred):
@@ -118,3 +122,27 @@ def plot_metrics(path, name, y_true, y_pred):
 	plt.close()
 	plt.clf()
 
+def compare_labels(path, labels_loc, labels_glob, labels):
+	os.makedirs(path, exist_ok=True)
+	plt.plot(labels_loc, '.', label='Local anomaly')
+	plt.plot(labels_glob, 'x', label='Global anomaly')
+	plt.plot(labels, '--', linewidth=0.3, alpha=0.2)
+	plt.fill_between(np.arange(labels.shape[0]), labels, color='blue', alpha=0.3, label='True anomaly')
+	plt.xlabel('Timestamp')
+	plt.ylabel('Label')
+	plt.title('Comparison of predicted anomaly labels')
+	plt.legend()
+	plt.savefig(f'{path}/compare_labels.png', dpi=300)
+	plt.close()
+
+	plt.plot(labels_loc, '--', linewidth=0.5, label='Local anomaly')
+	plt.plot(labels_glob, '--', linewidth=0.5, label='Global anomaly')
+	plt.plot(labels, linewidth=0.3, alpha=0.2)
+	plt.fill_between(np.arange(labels.shape[0]), labels, color='blue', alpha=0.2, label='True anomaly')
+	plt.xlabel('Timestamp')
+	plt.ylabel('Label')
+	plt.title('Comparison of predicted anomaly labels')
+	plt.legend(ncol=1, bbox_to_anchor=(0.75, 1.0))
+	plt.savefig(f'{path}/compare_labels2.png', dpi=300)
+	plt.close()
+        

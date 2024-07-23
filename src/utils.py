@@ -15,7 +15,7 @@ class color:
     UNDERLINE = '\033[4m'
 
 def plot_accuracies(accuracy_list, folder):
-	os.makedirs(f'plots/{folder}/', exist_ok=True)
+	os.makedirs(folder, exist_ok=True)
 	trainAcc = [i[0] for i in accuracy_list]
 	lrs = [i[1] for i in accuracy_list]
 	plt.xticks(range(len(trainAcc)))
@@ -28,7 +28,7 @@ def plot_accuracies(accuracy_list, folder):
 	ax2.set_ylabel('Learning Rate', rotation=270, labelpad=10)
 	ax2.plot(range(len(lrs)), lrs, label='Learning Rate', color='r', linewidth=1, linestyle='--', marker='.')
 	ax2.legend(loc='upper right')
-	plt.savefig(f'plots/{folder}/training-graph.pdf')
+	plt.savefig(f'{folder}/training-graph.pdf')
 	plt.clf()
 
 def cut_array(percentage, arr):

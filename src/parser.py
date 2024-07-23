@@ -19,6 +19,12 @@ parser.add_argument('--n_window',
 					required=False,
 					default=10,
                     help="number of timestamps in a window")
+parser.add_argument('--q', 
+					metavar='-q', 
+					type=float, 
+					required=False,
+					default=1e-5,
+                    help="detection level (risk) for POT method")
 parser.add_argument('--test', 
 					action='store_true', 
 					help="test the model")
