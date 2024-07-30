@@ -33,12 +33,15 @@ def load_dataset(dataset):
 	for file in ['train', 'test', 'labels']:
 		if dataset == 'SMD': file = 'machine-1-1_' + file
 		if dataset == 'SMAP': file = 'P-1_' + file
+		if dataset == 'SMAP_new': file = 'P-1_' + file
 		if dataset == 'MSL': file = 'C-1_' + file
 		if dataset == 'UCR': file = '136_' + file
 		if dataset == 'NAB': file = 'ec2_request_latency_system_failure_' + file
 		loader.append(np.load(os.path.join(folder, f'{file}.npy')))
 	# loader = [i[:, debug:debug+1] for i in loader]
 	if args.less: loader[0] = cut_array(0.2, loader[0])
+	# if args.less: loader[1] = cut_array(0.5, loader[1])
+	# if args.less: loader[2] = cut_array(0.5, loader[2])
 
 	# # test: invert time order of data
 	# loader[0] = np.flip(loader[0], axis=0)
@@ -49,6 +52,7 @@ def load_dataset(dataset):
 	test_loader = DataLoader(loader[1], batch_size=loader[1].shape[0])
 	labels = loader[2]
 	print('training set shape:', train_loader.dataset.shape)
+	print('test set shape:', test_loader.dataset.shape)
 	return train_loader, test_loader, labels
 
 def save_model(folder, model, optimizer, scheduler, epoch, accuracy_list):
@@ -350,7 +354,7 @@ if __name__ == '__main__':
 	# plot_path = f'{args.model}_{args.dataset}/n_window{args.n_window}/plots'
 	# res_path = f'{args.model}_{args.dataset}/n_window{args.n_window}/results'
 	# checkpoints_path = f'{args.model}_{args.dataset}/n_window{args.n_window}/checkpoints'
-	folder = f'preprocessing/{args.model}_{args.dataset}_new'
+	folder = f'{args.model}_{args.dataset}/n_window{args.n_window}'
 	plot_path = f'{folder}/plots'
 	res_path = f'{folder}/results'
 	checkpoints_path = f'{folder}/checkpoints'
@@ -404,22 +408,22 @@ if __name__ == '__main__':
 		df_res = pd.DataFrame.from_dict(result, orient='index').T
 		df = pd.concat([df, df_res], ignore_index=True)
 	lossTfinal, lossFinal = np.mean(lossT, axis=1), np.mean(loss, axis=1)
-	labelsFinal = (np.sum(labels, axis=1) >= 1) + 0
+	true_labels = (np.sum(labels, axis=1) >= 1) + 0
 	preds = np.array(preds).T
 	preds = preds.astype(int)
 	df_labels = pd.DataFrame(preds)
 	labelspred = (np.sum(preds, axis=1) >= 1) + 0
-	plot_ascore(plot_path, 'ascore_local', loss, labelsFinal)
-	plot_labels(plot_path, 'labels_local', labelspred, labelsFinal)
-	plot_metrics(plot_path, 'metrics_local', labelspred, labelsFinal)
+	plot_ascore(plot_path, 'ascore_local', ascore=loss, labels=true_labels)
+	plot_labels(plot_path, 'labels_local', y_pred=labelspred, y_true=true_labels)
+	plot_metrics(plot_path, 'metrics_local', y_pred=labelspred, y_true=true_labels)
 
-	result2, pred2 = pot_eval(lossTfinal, lossFinal, labelsFinal, plot_path, f'all_dim', q=args.q)
+	result2, pred2 = pot_eval(lossTfinal, lossFinal, true_labels, plot_path, f'all_dim', q=args.q)
 	labelspred2 = (pred2 >= 1) + 0
-	plot_ascore(plot_path, 'ascore_global', lossFinal, labelsFinal)
-	plot_labels(plot_path, 'labels_global', labelspred2, labelsFinal)
-	plot_metrics(plot_path, 'metrics_global', labelspred2, labelsFinal)
+	plot_ascore(plot_path, 'ascore_global', ascore=lossFinal, labels=true_labels)
+	plot_labels(plot_path, 'labels_global', y_pred=labelspred2, y_true=true_labels)
+	plot_metrics(plot_path, 'metrics_global', y_pred=labelspred2, y_true=true_labels)
 
-	compare_labels(plot_path, labels_loc=labelspred, labels_glob=labelspred2, labels=labelsFinal)
+	compare_labels(plot_path, labels_loc=labelspred, labels_glob=labelspred2, labels=true_labels)
 
 	result.update(hit_att(loss, labels))
 	result.update(ndcg(loss, labels))

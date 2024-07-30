@@ -607,7 +607,7 @@ class iTransformer(nn.Module):
 		dec_inp = torch.zeros_like(src[:, -self.pred_len:, :])
 		dec_inp = torch.cat([src[:, :self.label_len, :], dec_inp], dim=1)
 		
-		dec_out = self.forecast(src, src_mark_enc)  # [B, L, N],
+		dec_out = self.forecast(src, src_mark_enc)  # [B, L, N]
 		dec_out = dec_out[:, -1:, :]  # [B, 1, N], for now only give back last element of window/sequence
 		out = dec_out.permute(1, 0, 2)  # [1, B, N], permute to have same output structure as other models
 		return out

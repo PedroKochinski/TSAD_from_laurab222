@@ -44,12 +44,12 @@ def plotter(path, y_true, y_pred, ascore, labels):
 		plt.close()
 	pdf.close()
 
-def plot_labels(path, name, pred_labels, true_labels):
+def plot_labels(path, name, y_pred, y_true):
 	os.makedirs(path, exist_ok=True)
 	fig, ax1 = plt.subplots(figsize=(6,2))
-	ax1.plot(smooth(pred_labels), 'g.', label='Predicted anomaly')
-	ax1.plot(true_labels, '--', linewidth=0.3, alpha=0.2)
-	ax1.fill_between(np.arange(true_labels.shape[0]), true_labels, color='blue', alpha=0.3, label='True anomaly')
+	ax1.plot(smooth(y_pred), 'g.', label='Predicted anomaly')
+	ax1.plot(y_true, '--', linewidth=0.3, alpha=0.2)
+	ax1.fill_between(np.arange(y_true.shape[0]), y_true, color='blue', alpha=0.3, label='True anomaly')
 	plt.legend()
 	ax1.set_xlabel('Timestamp')
 	ax1.set_ylabel('Labels')
