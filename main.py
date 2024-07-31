@@ -35,6 +35,7 @@ def load_dataset(dataset):
 		if dataset == 'SMAP': file = 'P-1_' + file
 		if dataset == 'SMAP_new': file = 'P-1_' + file
 		if dataset == 'MSL': file = 'C-1_' + file
+		if dataset == 'MSL_new': file = 'C-1_' + file
 		if dataset == 'UCR': file = '136_' + file
 		if dataset == 'NAB': file = 'ec2_request_latency_system_failure_' + file
 		loader.append(np.load(os.path.join(folder, f'{file}.npy')))
@@ -311,7 +312,7 @@ def backprop(epoch, model, data, dataO, optimizer, scheduler, training = True):
 					z = model(d)[0]
 				else:
 					z = model(d)
-				l1 = l(z, elem) if not isinstance(z, tuple) else (1 / n) * l(z[0], elem) + (1 - 1/n) * l(z[1], elem)
+				l1 = l(z, elem)
 				l1s.append(torch.mean(l1).item())
 				loss = torch.mean(l1)
 				optimizer.zero_grad()
@@ -351,13 +352,14 @@ if __name__ == '__main__':
 	model, optimizer, scheduler, epoch, accuracy_list = load_model(args.model, labels.shape[1])
 
 	# define path for results, checkpoints & plots & create directories
-	# plot_path = f'{args.model}_{args.dataset}/n_window{args.n_window}/plots'
-	# res_path = f'{args.model}_{args.dataset}/n_window{args.n_window}/results'
-	# checkpoints_path = f'{args.model}_{args.dataset}/n_window{args.n_window}/checkpoints'
 	folder = f'{args.model}_{args.dataset}/n_window{args.n_window}'
+	# folder = f'studies2.3/{args.model}_{args.dataset}/detectionlvl_{args.q}'
 	plot_path = f'{folder}/plots'
 	res_path = f'{folder}/results'
-	checkpoints_path = f'{folder}/checkpoints'
+	if args.checkpoint is None:
+		checkpoints_path = f'{folder}/checkpoints'
+	else:
+		checkpoints_path = args.checkpoint
 	os.makedirs(plot_path, exist_ok=True)
 	os.makedirs(res_path, exist_ok=True)
 
@@ -397,41 +399,57 @@ if __name__ == '__main__':
 		plotter(plot_path, testO, y_pred, loss, labels)
 
 	### Scores
-	df = pd.DataFrame()
-	df_loss = pd.DataFrame()
 	lossT, _ = backprop(0, model, trainD, trainO, optimizer, scheduler, training=False)
-	df_loss = pd.DataFrame(loss)
+	# local anomaly labels
+	df_res_local = pd.DataFrame()
 	for i in range(loss.shape[1]):
 		lt, l, ls = lossT[:, i], loss[:, i], labels[:, i]
-		result, pred = pot_eval(lt, l, ls, plot_path, f'dim{i}', q=args.q)
+		result_local, pred = pot_eval(lt, l, ls, plot_path, f'dim{i}', q=args.q)
 		preds.append(pred)
-		df_res = pd.DataFrame.from_dict(result, orient='index').T
-		df = pd.concat([df, df_res], ignore_index=True)
+		df_res = pd.DataFrame.from_dict(result_local, orient='index').T
+		df_res_local = pd.concat([df_res_local, df_res], ignore_index=True)
 	lossTfinal, lossFinal = np.mean(lossT, axis=1), np.mean(loss, axis=1)
 	true_labels = (np.sum(labels, axis=1) >= 1) + 0
 	preds = np.array(preds).T
 	preds = preds.astype(int)
-	df_labels = pd.DataFrame(preds)
 	labelspred = (np.sum(preds, axis=1) >= 1) + 0
 	plot_ascore(plot_path, 'ascore_local', ascore=loss, labels=true_labels)
 	plot_labels(plot_path, 'labels_local', y_pred=labelspred, y_true=true_labels)
 	plot_metrics(plot_path, 'metrics_local', y_pred=labelspred, y_true=true_labels)
+	result_local = calc_point2point(predict=labelspred, actual=true_labels)
+	result_local = {'f1': result_local[0], 'precision': result_local[1], 'recall': result_local[2], 'TP': result_local[3], 
+				  'TN': result_local[4], 'FP': result_local[5], 'FN': result_local[6], 'ROC/AUC': result_local[7]}
+	result_local.update({'detection level q': args.q})
+	print('local results')
+	pprint(result_local)
 
-	result2, pred2 = pot_eval(lossTfinal, lossFinal, true_labels, plot_path, f'all_dim', q=args.q)
+	# global anomaly labels
+	result_global, pred2 = pot_eval(lossTfinal, lossFinal, true_labels, plot_path, f'all_dim', q=args.q)
 	labelspred2 = (pred2 >= 1) + 0
 	plot_ascore(plot_path, 'ascore_global', ascore=lossFinal, labels=true_labels)
 	plot_labels(plot_path, 'labels_global', y_pred=labelspred2, y_true=true_labels)
 	plot_metrics(plot_path, 'metrics_global', y_pred=labelspred2, y_true=true_labels)
+	metrics_global = calc_point2point(predict=labelspred2, actual=true_labels)
+	result_global.update(hit_att(loss, labels))
+	result_global.update(ndcg(loss, labels))
+	result_global.update({'detection level q': args.q})
+	print('\nglobal results') 
+	pprint(result_global)
 
+	# compare local & global anomaly labels
 	compare_labels(plot_path, labels_loc=labelspred, labels_glob=labelspred2, labels=true_labels)
 
-	result.update(hit_att(loss, labels))
-	result.update(ndcg(loss, labels))
-	result.update({'detection level q': args.q})
-	print(df)
-	pprint(result)
-	df_res = pd.DataFrame.from_dict(result, orient='index').T
-	df_res.to_csv(f'{res_path}/all_res.csv', index=False)
-	df_loss.to_csv(f'{res_path}/test_loss.csv', index=False)
+
+	# saving results
+	df_res_global = pd.DataFrame.from_dict(result_global, orient='index').T
+	df_res_global.index = ['global']
+	result_local = pd.DataFrame.from_dict(result_local, orient='index').T
+	result_local.index = ['local_all']
+	df_res_local = pd.concat([df_res_local, result_local])
+	df_res = pd.concat([df_res_local, df_res_global]) #, keys=['local', 'global'])
+	# df_labels = pd.concat([pd.DataFrame(labelspred), pd.DataFrame(labelspred2)], axis=1, keys=['local', 'global'])
+	df_labels = pd.DataFrame( {'local': labelspred, 'global': labelspred2} )
+
+	df_res.to_csv(f'{res_path}/res.csv')	
 	df_labels.to_csv(f'{res_path}/pred_labels.csv', index=False)
-	df.to_csv(f'{res_path}/separate_results.csv', index=False)
+

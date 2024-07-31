@@ -25,6 +25,10 @@ parser.add_argument('--q',
 					required=False,
 					default=1e-5,
                     help="detection level (risk) for POT method")
+parser.add_argument('--checkpoint', 
+                    required=False,
+                    default=None,
+					help="path to pretrained model checkpoint")
 parser.add_argument('--test', 
 					action='store_true', 
 					help="test the model")
