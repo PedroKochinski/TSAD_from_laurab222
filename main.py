@@ -374,12 +374,12 @@ if __name__ == '__main__':
 	if model.name in ['Attention', 'DAGMM', 'USAD', 'MSCRED', 'CAE_M', 'GDN', 'MTAD_GAT', 'MAD_GAN', 'iTransformer'] or 'TranAD' in model.name: 
 		trainD, testD = convert_to_windows(trainD, model), convert_to_windows(testD, model)
 
-	if model.name == 'iTransformer':
-		summary(model, input_data=trainD, depth=5, verbose=1)
+	# if model.name == 'iTransformer':
+	# 	summary(model, input_data=trainD, depth=5, verbose=1)
 	### Training phase
 	if not args.test:
 		print(f'{color.HEADER}Training {args.model} on {args.dataset}{color.ENDC}')
-		num_epochs = 5; e = epoch + 1; start = time()
+		num_epochs = 10; e = epoch + 1; start = time()
 		for e in tqdm(list(range(epoch+1, epoch+num_epochs+1))):
 			lossT, lr = backprop(e, model, trainD, trainO, optimizer, scheduler)
 			accuracy_list.append((lossT, lr))

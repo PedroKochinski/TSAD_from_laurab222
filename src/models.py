@@ -509,7 +509,8 @@ class TranAD(nn.Module):
 		self.transformer_decoder1 = TransformerDecoder(decoder_layers1, 1)
 		decoder_layers2 = TransformerDecoderLayer(d_model=2 * feats, nhead=feats, dim_feedforward=16, dropout=0.1)
 		self.transformer_decoder2 = TransformerDecoder(decoder_layers2, 1)
-		self.fcn = nn.Sequential(nn.Linear(2 * feats, feats), nn.Sigmoid())
+		# self.fcn = nn.Sequential(nn.Linear(2 * feats, feats), nn.Sigmoid())
+		self.fcn = nn.Sequential(nn.Linear(2 * feats, 2 * feats), nn.Sigmoid())
 
 	def encode(self, src, c, tgt):
 		src = torch.cat((src, c), dim=2)
@@ -522,10 +523,16 @@ class TranAD(nn.Module):
 	def forward(self, src, tgt):
 		# Phase 1 - Without anomaly scores
 		c = torch.zeros_like(src)
-		x1 = self.fcn(self.transformer_decoder1(*self.encode(src, c, tgt)))
+		# x1 = self.fcn(self.transformer_decoder1(*self.encode(src, c, tgt)))
+		x1_out = self.fcn(self.transformer_decoder1(*self.encode(src, c, tgt)))
+		x1_mu, x1_logsigma = torch.split(x1_out, split_size_or_sections=self.n_feats, dim=2)
+		x1 = torch.normal(mean=x1_mu, std=torch.exp(x1_logsigma))
 		# Phase 2 - With anomaly scores
 		c = (x1 - src) ** 2
-		x2 = self.fcn(self.transformer_decoder2(*self.encode(src, c, tgt)))
+		# x2 = self.fcn(self.transformer_decoder2(*self.encode(src, c, tgt)))
+		x2_out = self.fcn(self.transformer_decoder2(*self.encode(src, c, tgt)))
+		x2_mu, x2_logsigma = torch.split(x2_out, split_size_or_sections=self.n_feats, dim=2)
+		x2 = torch.normal(mean=x2_mu, std=torch.exp(x2_logsigma))
 		return x1, x2
 
 class iTransformer(nn.Module):
@@ -569,7 +576,8 @@ class iTransformer(nn.Module):
             ],
             norm_layer=torch.nn.LayerNorm(self.d_model)
         )
-		self.projector = nn.Linear(self.d_model, self.pred_len, bias=True)
+		# self.projector = nn.Linear(self.d_model, self.pred_len, bias=True)
+		self.projector = nn.Linear(self.d_model, 2*self.pred_len, bias=True)
 	
 	def forecast(self, x_enc, x_mark_enc=None):
 		if self.use_norm:
@@ -592,13 +600,13 @@ class iTransformer(nn.Module):
         # the dimensions of embedded time series has been inverted, and then processed by native attn, layernorm and ffn modules
 		enc_out, attns = self.encoder(enc_out, attn_mask=None)
 
-        # B N E -> B N S -> B S N 
+        # B N E -> B N S -> B S N  
 		dec_out = self.projector(enc_out).permute(0, 2, 1)[:, :, :N] # filter the covariates
 
 		if self.use_norm:
 			# De-Normalization from Non-stationary Transformer
-			dec_out = dec_out * (stdev[:, 0, :].unsqueeze(1).repeat(1, self.pred_len, 1))
-			dec_out = dec_out + (means[:, 0, :].unsqueeze(1).repeat(1, self.pred_len, 1))
+			dec_out = dec_out * (stdev[:, 0, :].unsqueeze(1).repeat(1, 2*self.pred_len, 1))
+			dec_out = dec_out + (means[:, 0, :].unsqueeze(1).repeat(1, 2*self.pred_len, 1))
 
 		return dec_out
 	
@@ -607,7 +615,9 @@ class iTransformer(nn.Module):
 		dec_inp = torch.zeros_like(src[:, -self.pred_len:, :])
 		dec_inp = torch.cat([src[:, :self.label_len, :], dec_inp], dim=1)
 		
-		dec_out = self.forecast(src, src_mark_enc)  # [B, L, N]
-		dec_out = dec_out[:, -1:, :]  # [B, 1, N], for now only give back last element of window/sequence
+		dec_out = self.forecast(src, src_mark_enc)  # [B, 2L, N]
+		dec_mu, dec_logsigma = torch.split(dec_out, split_size_or_sections=self.pred_len, dim=1)
+		dec_out = torch.normal(mean=dec_mu, std=torch.exp(dec_logsigma))
+		dec_out = dec_out[:, -1:, :]  # [B, 1, N], for AD only give back last element of window/sequence
 		out = dec_out.permute(1, 0, 2)  # [1, B, N], permute to have same output structure as other models
 		return out
