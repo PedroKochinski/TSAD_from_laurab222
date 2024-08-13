@@ -152,8 +152,8 @@ def pot_eval(init_score, score, label, path='./plots', name='pot_plot', q=1e-5, 
     # DEBUG - print(np.argwhere(np.array(pred)))
     p_t = calc_point2point(pred, label)
 
-    if not np.all(pred == pred.flat[0]) and not np.all(label == label.flat[0]):
-        plot_metrics(f'{path}/metrics', name, y_true=label, y_pred=pred)
+    # if not np.all(pred == pred.flat[0]) and not np.all(label == label.flat[0]) and plot:
+    #     plot_metrics(f'{path}/metrics', name, y_true=label, y_pred=pred)
     # print('POT result: ', p_t, pot_th, p_latency)
     return {
         'f1': p_t[0],

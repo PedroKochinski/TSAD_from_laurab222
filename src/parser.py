@@ -38,5 +38,8 @@ parser.add_argument('--retrain',
 parser.add_argument('--less', 
 					action='store_true', 
 					help="train using less data")
+parser.add_argument('--prob', 
+					action='store_true', 
+					help="model gives back probabilistic output")
 parser.add_argument('--f', default=None, help='dummy argument for jupyter notebooks')
 args = parser.parse_args()

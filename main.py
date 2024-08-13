@@ -43,11 +43,6 @@ def load_dataset(dataset):
 	if args.less: loader[0] = cut_array(0.2, loader[0])
 	# if args.less: loader[1] = cut_array(0.5, loader[1])
 	# if args.less: loader[2] = cut_array(0.5, loader[2])
-
-	# # test: invert time order of data
-	# loader[0] = np.flip(loader[0], axis=0)
-	# loader[1] = np.flip(loader[1], axis=0)
-	# loader[2] = np.flip(loader[2], axis=0)
 	
 	train_loader = DataLoader(loader[0], batch_size=loader[0].shape[0])
 	test_loader = DataLoader(loader[1], batch_size=loader[1].shape[0])
@@ -69,7 +64,7 @@ def save_model(folder, model, optimizer, scheduler, epoch, accuracy_list):
 def load_model(modelname, dims):
 	import src.models
 	model_class = getattr(src.models, modelname)
-	model = model_class(dims, args.n_window).double()
+	model = model_class(dims, args.n_window, args.prob).double()
 	optimizer = torch.optim.AdamW(model.parameters() , lr=model.lr, weight_decay=1e-5)
 	scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 5, 0.9)
 	fname = f'checkpoints/{args.model}_{args.dataset}/model.ckpt'
@@ -273,9 +268,20 @@ def backprop(epoch, model, data, dataO, optimizer, scheduler, training = True):
 				local_bs = d.shape[0]
 				window = d.permute(1, 0, 2)
 				elem = window[-1, :, :].view(1, local_bs, feats)
-				if not l1s and n<=1: 
-					summary(model, input_data=[window, elem])
+				# if not l1s and n<=1: 
+				# 	summary(model, input_data=[window, elem])
 				z = model(window, elem)
+				if args.prob:  # sample from probabilistic output
+					if isinstance(z, tuple):  # if z = (x1, x2)
+						x1 = z[0]; x2 = z[1]
+						x1_mu, x1_logsigma = torch.split(x1, split_size_or_sections=feats, dim=2)
+						x1 = x1_mu + torch.randn(size=x1_logsigma.size()) * torch.exp(x1_logsigma)
+						x2_mu, x2_logsigma = torch.split(x2, split_size_or_sections=feats, dim=2)
+						x2 = x2_mu + torch.randn(size=x2_logsigma.size()) * torch.exp(x2_logsigma)
+						z = (x1, x2)
+					else:  # if z = x2
+						z_mu, z_logsigma = torch.split(z, split_size_or_sections=feats, dim=2)
+						z = z_mu + torch.randn(size=z_logsigma.size())*torch.exp(z_logsigma)
 				l1 = l(z, elem) if not isinstance(z, tuple) else (1 / n) * l(z[0], elem) + (1 - 1/n) * l(z[1], elem)
 				if isinstance(z, tuple): z = z[1]
 				l1s.append(torch.mean(l1).item())
@@ -291,6 +297,15 @@ def backprop(epoch, model, data, dataO, optimizer, scheduler, training = True):
 				window = d.permute(1, 0, 2)
 				elem = window[-1, :, :].view(1, bs, feats)
 				z = model(window, elem)
+				if args.prob:  # don't sample from probabilistic output for testing, just use mean
+					if isinstance(z, tuple):  # if z = (x1, x2)
+						x1 = z[0]; x2 = z[1]
+						x1_mu, x1_logsigma = torch.split(x1, split_size_or_sections=feats, dim=2)
+						x2_mu, x2_logsigma = torch.split(x2, split_size_or_sections=feats, dim=2)
+						z = (x1_mu, x2_mu)
+					else:  # if z = x2
+						z_mu, z_logsigma = torch.split(x1, split_size_or_sections=feats, dim=2)
+						z = z_mu
 				if isinstance(z, tuple): z = z[1]
 			loss = l(z, elem)[0]
 			return loss.detach().numpy(), z.detach().numpy()[0]
@@ -300,21 +315,30 @@ def backprop(epoch, model, data, dataO, optimizer, scheduler, training = True):
 		bs = model.batch if training else len(data)
 		dataloader = DataLoader(dataset, batch_size = bs)
 		n = epoch + 1
-		l1s, l2s = [], []
+		l1s = []
 		if training:
 			for d, _ in dataloader:
 				local_bs = d.shape[0]
-				# don't invert d because we have permutation later in DataEmbedding_inverted
-				elem = d.permute(1, 0, 2)[-1, :, :].view(1, local_bs, feats)
+				# don't invert d because we have permutation later in DataEmbedding_inverted as part of model
+				elem = d.permute(1, 0, 2)[-1, :, :].view(1, local_bs, feats)  # [1, B, N]
 				# if not l1s: 
 				# 	summary(model, input_size=[1, 10, 25])
 				if model.output_attention:
 					z = model(d)[0]
 				else:
 					z = model(d)
+				if args.prob:  # sample from probabilistic output
+					z_mu = z[0]
+					z_logsigma = z[1]
+					z = z_mu + torch.randn(size=z_logsigma.size())*torch.exp(z_logsigma)
 				l1 = l(z, elem)
 				l1s.append(torch.mean(l1).item())
-				loss = torch.mean(l1)
+				if args.prob:
+					loss = torch.mean(l1) + torch.mean(z_logsigma)
+					# loss_fct = torch.nn.GaussianNLLLoss(eps=1e-6, reduction='mean')
+					# loss = loss_fct(z, elem, torch.exp(2*z_logsigma))
+				else:
+					loss = torch.mean(l1)
 				optimizer.zero_grad()
 				loss.backward(retain_graph=True)
 				optimizer.step()
@@ -330,8 +354,14 @@ def backprop(epoch, model, data, dataO, optimizer, scheduler, training = True):
 					z = model(d)[0]
 				else:
 					z = model(d)
-			loss = l(z, elem)[0]  # because we didn't permute tensor as done for TranAD
-			return loss.detach().numpy(), z.detach().numpy()[0]
+				if args.prob:  # don't sample from probabilistic output for testing, just use mean
+					z_mu = z[0]
+					z_logsigma = z[1]
+					z = z_mu
+			# loss_fct = torch.nn.GaussianNLLLoss(eps=1e-6, reduction='none')
+			# loss = loss_fct(z, elem, torch.exp(2*z_logsigma))
+			loss = l(z, elem)
+			return loss.detach().numpy()[0], z.detach().numpy()[0] # because we have unnecessary third dimension
 	else:
 		y_pred = model(data)
 		loss = l(y_pred, data)
@@ -379,7 +409,7 @@ if __name__ == '__main__':
 	### Training phase
 	if not args.test:
 		print(f'{color.HEADER}Training {args.model} on {args.dataset}{color.ENDC}')
-		num_epochs = 10; e = epoch + 1; start = time()
+		num_epochs = 5; e = epoch + 1; start = time()
 		for e in tqdm(list(range(epoch+1, epoch+num_epochs+1))):
 			lossT, lr = backprop(e, model, trainD, trainO, optimizer, scheduler)
 			accuracy_list.append((lossT, lr))
@@ -394,9 +424,9 @@ if __name__ == '__main__':
 	loss, y_pred = backprop(0, model, testD, testO, optimizer, scheduler, training=False)
 
 	### Plot curves
-	if not args.test:
-		if 'TranAD' in model.name: testO = torch.roll(testO, 1, 0) 
-		plotter(plot_path, testO, y_pred, loss, labels)
+	# if not args.test:
+	if 'TranAD' in model.name: testO = torch.roll(testO, 1, 0) 
+	plotter(plot_path, testO, y_pred, loss, labels)
 
 	### Scores
 	lossT, _ = backprop(0, model, trainD, trainO, optimizer, scheduler, training=False)
@@ -417,19 +447,33 @@ if __name__ == '__main__':
 	plot_labels(plot_path, 'labels_local', y_pred=labelspred, y_true=true_labels)
 	plot_metrics(plot_path, 'metrics_local', y_pred=labelspred, y_true=true_labels)
 	result_local = calc_point2point(predict=labelspred, actual=true_labels)
-	result_local = {'f1': result_local[0], 'precision': result_local[1], 'recall': result_local[2], 'TP': result_local[3], 
+	result_local1 = {'f1': result_local[0], 'precision': result_local[1], 'recall': result_local[2], 'TP': result_local[3], 
 				  'TN': result_local[4], 'FP': result_local[5], 'FN': result_local[6], 'ROC/AUC': result_local[7]}
-	result_local.update({'detection level q': args.q})
+	result_local1.update({'detection level q': args.q})
 	print('local results')
-	pprint(result_local)
+	pprint(result_local1)
+
+	# do majority voting over dimensions for local results instead of inclusive OR
+	majority = math.ceil(labels.shape[1] / 2)
+	labelspred_maj = (np.sum(preds, axis=1) >= majority) + 0
+	plot_labels(plot_path, 'labels_local_maj', y_pred=labelspred_maj, y_true=true_labels)
+	plot_metrics(plot_path, 'metrics_local_maj', y_pred=labelspred_maj, y_true=true_labels)
+	result_local = calc_point2point(predict=labelspred_maj, actual=true_labels)
+	result_local2 = {'f1': result_local[0], 'precision': result_local[1], 'recall': result_local[2], 'TP': result_local[3], 
+				  'TN': result_local[4], 'FP': result_local[5], 'FN': result_local[6], 'ROC/AUC': result_local[7]}
+	result_local2.update({'detection level q': args.q})
+	print('\nlocal results with majority voting')
+	pprint(result_local2)
+	temp = np.where(labelspred_maj != true_labels)
+	print(temp, np.all(labelspred_maj == true_labels))
 
 	# global anomaly labels
 	result_global, pred2 = pot_eval(lossTfinal, lossFinal, true_labels, plot_path, f'all_dim', q=args.q)
-	labelspred2 = (pred2 >= 1) + 0
+	labelspred_glob = (pred2 >= 1) + 0
 	plot_ascore(plot_path, 'ascore_global', ascore=lossFinal, labels=true_labels)
-	plot_labels(plot_path, 'labels_global', y_pred=labelspred2, y_true=true_labels)
-	plot_metrics(plot_path, 'metrics_global', y_pred=labelspred2, y_true=true_labels)
-	metrics_global = calc_point2point(predict=labelspred2, actual=true_labels)
+	plot_labels(plot_path, 'labels_global', y_pred=labelspred_glob, y_true=true_labels)
+	plot_metrics(plot_path, 'metrics_global', y_pred=labelspred_glob, y_true=true_labels)
+	metrics_global = calc_point2point(predict=labelspred_glob, actual=true_labels)
 	result_global.update(hit_att(loss, labels))
 	result_global.update(ndcg(loss, labels))
 	result_global.update({'detection level q': args.q})
@@ -437,18 +481,21 @@ if __name__ == '__main__':
 	pprint(result_global)
 
 	# compare local & global anomaly labels
-	compare_labels(plot_path, labels_loc=labelspred, labels_glob=labelspred2, labels=true_labels)
-
+	compare_labels(plot_path, pred_labels=[labelspred, labelspred_maj], true_labels=true_labels, 
+				plot_labels=['Local anomaly\n(inclusive OR)', 'Local anomaly\n(majority voting)'], name='_loc_vs_maj')
+	compare_labels(plot_path, pred_labels=[labelspred, labelspred_maj, labelspred_glob], true_labels=true_labels, 
+				plot_labels=['Local anomaly\n(inclusive OR)', 'Local anomaly\n(majority voting)', 'Global anomaly'], name='_all')
 
 	# saving results
 	df_res_global = pd.DataFrame.from_dict(result_global, orient='index').T
 	df_res_global.index = ['global']
-	result_local = pd.DataFrame.from_dict(result_local, orient='index').T
-	result_local.index = ['local_all']
-	df_res_local = pd.concat([df_res_local, result_local])
-	df_res = pd.concat([df_res_local, df_res_global]) #, keys=['local', 'global'])
-	# df_labels = pd.concat([pd.DataFrame(labelspred), pd.DataFrame(labelspred2)], axis=1, keys=['local', 'global'])
-	df_labels = pd.DataFrame( {'local': labelspred, 'global': labelspred2} )
+	result_local1 = pd.DataFrame.from_dict(result_local1, orient='index').T
+	result_local2 = pd.DataFrame.from_dict(result_local2, orient='index').T
+	result_local1.index = ['local_all']
+	result_local2.index = ['local_all_maj']
+	df_res_local = pd.concat([df_res_local, result_local1, result_local2])
+	df_res = pd.concat([df_res_local, df_res_global]) 
+	df_labels = pd.DataFrame( {'local': labelspred, 'local_maj': labelspred_maj, 'global': labelspred_glob} )
 
 	df_res.to_csv(f'{res_path}/res.csv')	
 	df_labels.to_csv(f'{res_path}/pred_labels.csv', index=False)

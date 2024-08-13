@@ -122,27 +122,27 @@ def plot_metrics(path, name, y_true, y_pred):
 	plt.close()
 	plt.clf()
 
-def compare_labels(path, labels_loc, labels_glob, labels):
+def compare_labels(path, pred_labels, true_labels, plot_labels, name=''):
 	os.makedirs(path, exist_ok=True)
-	plt.plot(labels_loc, '.', label='Local anomaly')
-	plt.plot(labels_glob, 'x', label='Global anomaly')
-	plt.plot(labels, '--', linewidth=0.3, alpha=0.2)
-	plt.fill_between(np.arange(labels.shape[0]), labels, color='blue', alpha=0.3, label='True anomaly')
+	for data, lab in zip(pred_labels, plot_labels):
+		plt.plot(data, '.', label=lab)
+	plt.plot(true_labels, '--', linewidth=0.3, alpha=0.2)
+	plt.fill_between(np.arange(true_labels.shape[0]), true_labels, color='blue', alpha=0.3, label='True anomaly')
 	plt.xlabel('Timestamp')
 	plt.ylabel('Label')
 	plt.title('Comparison of predicted anomaly labels')
 	plt.legend()
-	plt.savefig(f'{path}/compare_labels.png', dpi=300)
+	plt.savefig(f'{path}/compare_labels{name}.png', dpi=300)
 	plt.close()
 
-	plt.plot(labels_loc, '--', linewidth=0.5, label='Local anomaly')
-	plt.plot(labels_glob, '--', linewidth=0.5, label='Global anomaly')
-	plt.plot(labels, linewidth=0.3, alpha=0.2)
-	plt.fill_between(np.arange(labels.shape[0]), labels, color='blue', alpha=0.2, label='True anomaly')
+	for data, lab in zip(pred_labels, plot_labels):
+		plt.plot(data, '--', linewidth=0.5, label=lab)
+	plt.plot(true_labels, linewidth=0.3, alpha=0.2)
+	plt.fill_between(np.arange(true_labels.shape[0]), true_labels, color='blue', alpha=0.2, label='True anomaly')
 	plt.xlabel('Timestamp')
 	plt.ylabel('Label')
 	plt.title('Comparison of predicted anomaly labels')
 	plt.legend(ncol=1, bbox_to_anchor=(0.75, 1.0))
-	plt.savefig(f'{path}/compare_labels2.png', dpi=300)
+	plt.savefig(f'{path}/compare_labels2{name}.png', dpi=300)
 	plt.close()
         
