@@ -149,3 +149,4 @@ preprocessing/*
 iTransformer*/*
 TranAD*/*
 *.csv
+data/*

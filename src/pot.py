@@ -19,11 +19,12 @@ def calc_point2point(predict, actual):
     precision = TP / (TP + FP + 0.00001)
     recall = TP / (TP + FN + 0.00001)
     f1 = 2 * precision * recall / (precision + recall + 0.00001)
+    mcc = matthews_corrcoef(y_true=actual, y_pred=predict)
     try:
         roc_auc = roc_auc_score(actual, predict)
     except:
         roc_auc = 0
-    return f1, precision, recall, TP, TN, FP, FN, roc_auc
+    return f1, precision, recall, TP, TN, FP, FN, roc_auc, mcc
 
 
 # the below function is taken from OmniAnomaly code base directly
@@ -164,6 +165,7 @@ def pot_eval(init_score, score, label, path='./plots', name='pot_plot', q=1e-5, 
         'FP': p_t[5],
         'FN': p_t[6],
         'ROC/AUC': p_t[7],
+        'MCC': p_t[8],
         'threshold': pot_th,
         # 'pot-latency': p_latency
     }, np.array(pred)

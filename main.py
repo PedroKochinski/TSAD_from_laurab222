@@ -14,7 +14,6 @@ from time import time
 from pprint import pprint
 from torchinfo import summary
 
-# from beepy import beep
 
 def convert_to_windows(data, model):
 	windows = []; w_size = model.n_window
@@ -41,8 +40,8 @@ def load_dataset(dataset):
 		loader.append(np.load(os.path.join(folder, f'{file}.npy')))
 	# loader = [i[:, debug:debug+1] for i in loader]
 	if args.less: loader[0] = cut_array(0.2, loader[0])
-	# if args.less: loader[1] = cut_array(0.5, loader[1])
-	# if args.less: loader[2] = cut_array(0.5, loader[2])
+	if args.less: loader[1] = cut_array(0.5, loader[1])
+	if args.less: loader[2] = cut_array(0.5, loader[2])
 	
 	train_loader = DataLoader(loader[0], batch_size=loader[0].shape[0])
 	test_loader = DataLoader(loader[1], batch_size=loader[1].shape[0])
@@ -61,15 +60,18 @@ def save_model(folder, model, optimizer, scheduler, epoch, accuracy_list):
         'scheduler_state_dict': scheduler.state_dict(),
         'accuracy_list': accuracy_list}, file_path)
 
-def load_model(modelname, dims):
+def load_model(modelname, dims, checkpoint=None):
 	import src.models
 	model_class = getattr(src.models, modelname)
 	model = model_class(dims, args.n_window, args.prob).double()
 	optimizer = torch.optim.AdamW(model.parameters() , lr=model.lr, weight_decay=1e-5)
 	scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 5, 0.9)
-	fname = f'checkpoints/{args.model}_{args.dataset}/model.ckpt'
-	if os.path.exists(fname) and (not args.retrain or args.test):
-		print(f"{color.GREEN}Loading pre-trained model: {model.name}{color.ENDC}")
+	if checkpoint is not None:
+		fname = checkpoint
+	else:
+		fname = f'{args.model}_{args.dataset}/n_window{args.n_window}/checkpoints/model.ckpt'
+	if (os.path.exists(fname) and not args.retrain) or args.test:
+		print(f"{color.GREEN}Loading pre-trained model: {model.name}{color.ENDC} from {fname}")
 		checkpoint = torch.load(fname)
 		model.load_state_dict(checkpoint['model_state_dict'])
 		optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -334,7 +336,9 @@ def backprop(epoch, model, data, dataO, optimizer, scheduler, training = True):
 				l1 = l(z, elem)
 				l1s.append(torch.mean(l1).item())
 				if args.prob:
-					loss = torch.mean(l1) + torch.mean(z_logsigma)
+					z_std = torch.exp(z_logsigma)
+					loss = torch.mean(l1/z_std) + torch.mean(z_std)
+					# loss = torch.mean(l1)
 					# loss_fct = torch.nn.GaussianNLLLoss(eps=1e-6, reduction='mean')
 					# loss = loss_fct(z, elem, torch.exp(2*z_logsigma))
 				else:
@@ -361,6 +365,9 @@ def backprop(epoch, model, data, dataO, optimizer, scheduler, training = True):
 			# loss_fct = torch.nn.GaussianNLLLoss(eps=1e-6, reduction='none')
 			# loss = loss_fct(z, elem, torch.exp(2*z_logsigma))
 			loss = l(z, elem)
+			# if args.prob:
+			# 	z_std = torch.exp(z_logsigma)
+			# 	loss = loss / z_std  # + z_std
 			return loss.detach().numpy()[0], z.detach().numpy()[0] # because we have unnecessary third dimension
 	else:
 		y_pred = model(data)
@@ -376,13 +383,15 @@ def backprop(epoch, model, data, dataO, optimizer, scheduler, training = True):
 			return loss.detach().numpy(), y_pred.detach().numpy()
 
 if __name__ == '__main__':
+	print(args, '\n')
+
 	train_loader, test_loader, labels = load_dataset(args.dataset)
 	if args.model in ['MERLIN']:
 		eval(f'run_{args.model.lower()}(test_loader, labels, args.dataset)')
-	model, optimizer, scheduler, epoch, accuracy_list = load_model(args.model, labels.shape[1])
+	model, optimizer, scheduler, epoch, accuracy_list = load_model(args.model, labels.shape[1], args.checkpoint)
 
 	# define path for results, checkpoints & plots & create directories
-	folder = f'{args.model}_{args.dataset}/n_window{args.n_window}'
+	folder = f'studies3/{args.model}_{args.dataset}/n_window{args.n_window}'
 	# folder = f'studies2.3/{args.model}_{args.dataset}/detectionlvl_{args.q}'
 	plot_path = f'{folder}/plots'
 	res_path = f'{folder}/results'
@@ -447,8 +456,9 @@ if __name__ == '__main__':
 	plot_labels(plot_path, 'labels_local', y_pred=labelspred, y_true=true_labels)
 	plot_metrics(plot_path, 'metrics_local', y_pred=labelspred, y_true=true_labels)
 	result_local = calc_point2point(predict=labelspred, actual=true_labels)
-	result_local1 = {'f1': result_local[0], 'precision': result_local[1], 'recall': result_local[2], 'TP': result_local[3], 
-				  'TN': result_local[4], 'FP': result_local[5], 'FN': result_local[6], 'ROC/AUC': result_local[7]}
+	result_local1 = {'f1': result_local[0], 'precision': result_local[1], 'recall': result_local[2], 
+				  'TP': result_local[3], 'TN': result_local[4], 'FP': result_local[5], 'FN': result_local[6], 
+				  'ROC/AUC': result_local[7], 'MCC': result_local[8]}
 	result_local1.update({'detection level q': args.q})
 	print('local results')
 	pprint(result_local1)
@@ -459,8 +469,9 @@ if __name__ == '__main__':
 	plot_labels(plot_path, 'labels_local_maj', y_pred=labelspred_maj, y_true=true_labels)
 	plot_metrics(plot_path, 'metrics_local_maj', y_pred=labelspred_maj, y_true=true_labels)
 	result_local = calc_point2point(predict=labelspred_maj, actual=true_labels)
-	result_local2 = {'f1': result_local[0], 'precision': result_local[1], 'recall': result_local[2], 'TP': result_local[3], 
-				  'TN': result_local[4], 'FP': result_local[5], 'FN': result_local[6], 'ROC/AUC': result_local[7]}
+	result_local2 = {'f1': result_local[0], 'precision': result_local[1], 'recall': result_local[2], 
+				  'TP': result_local[3], 'TN': result_local[4], 'FP': result_local[5], 'FN': result_local[6], 
+				  'ROC/AUC': result_local[7], 'MCC': result_local[8]}
 	result_local2.update({'detection level q': args.q})
 	print('\nlocal results with majority voting')
 	pprint(result_local2)

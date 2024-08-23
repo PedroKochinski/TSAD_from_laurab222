@@ -84,7 +84,7 @@ class LSTM_AD(nn.Module):
 
 ## DAGMM Model (ICLR 18)
 class DAGMM(nn.Module):
-	def __init__(self, feats):
+	def __init__(self, feats, n_window=5, prob=False):
 		super(DAGMM, self).__init__()
 		self.name = 'DAGMM'
 		self.lr = 0.0001
@@ -92,7 +92,7 @@ class DAGMM(nn.Module):
 		self.n_feats = feats
 		self.n_hidden = 16
 		self.n_latent = 8
-		self.n_window = 5 # DAGMM w_size = 5
+		self.n_window = n_window # DAGMM w_size = 5
 		self.n = self.n_feats * self.n_window
 		self.n_gmm = self.n_feats * self.n_window
 		self.encoder = nn.Sequential(
@@ -542,7 +542,7 @@ class iTransformer(nn.Module):
 		super(iTransformer, self).__init__()
 		self.name = 'iTransformer'
 		self.lr = lr
-		self.batch = 1 if n_window > 1280 else int(1280 / n_window) # 128 for window size 10
+		self.batch = 5 # 1 if n_window > 1280 else int(1280 / n_window) # 128 for window size 10
 		self.n_feats = feats
 		self.n_window = n_window
 		self.n = self.n_feats * self.n_window
