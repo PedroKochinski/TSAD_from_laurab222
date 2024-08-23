@@ -40,8 +40,8 @@ def load_dataset(dataset):
 		loader.append(np.load(os.path.join(folder, f'{file}.npy')))
 	# loader = [i[:, debug:debug+1] for i in loader]
 	if args.less: loader[0] = cut_array(0.2, loader[0])
-	if args.less: loader[1] = cut_array(0.5, loader[1])
-	if args.less: loader[2] = cut_array(0.5, loader[2])
+	# if args.less: loader[1] = cut_array(0.5, loader[1])
+	# if args.less: loader[2] = cut_array(0.5, loader[2])
 	
 	train_loader = DataLoader(loader[0], batch_size=loader[0].shape[0])
 	test_loader = DataLoader(loader[1], batch_size=loader[1].shape[0])
