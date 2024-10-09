@@ -61,7 +61,7 @@ class Attention(nn.Module):
 
 ## LSTM_AD Model
 class LSTM_AD(nn.Module):
-	def __init__(self, feats):
+	def __init__(self, feats, n_window=None, prob=False):
 		super(LSTM_AD, self).__init__()
 		self.name = 'LSTM_AD'
 		self.lr = 0.002
@@ -129,7 +129,7 @@ class DAGMM(nn.Module):
 
 ## OmniAnomaly Model (KDD 19)
 class OmniAnomaly(nn.Module):
-	def __init__(self, feats):
+	def __init__(self, feats, n_window=None, prob=False):
 		super(OmniAnomaly, self).__init__()
 		self.name = 'OmniAnomaly'
 		self.lr = 0.002
@@ -326,7 +326,7 @@ class GDN(nn.Module):
 
 # MAD_GAN (ICANN 19)
 class MAD_GAN(nn.Module):
-	def __init__(self, feats):
+	def __init__(self, feats, n_window=None, prob=False):
 		super(MAD_GAN, self).__init__()
 		self.name = 'MAD_GAN'
 		self.lr = 0.0001
@@ -498,7 +498,7 @@ class TranAD(nn.Module):
 		super(TranAD, self).__init__()
 		self.name = 'TranAD'
 		self.lr = lr
-		self.batch = 1 if n_window > 1280 else int(1280 / n_window) # 128
+		self.batch = 10  # 1 if n_window > 1280 else int(1280 / n_window) # 128
 		self.n_feats = feats
 		self.n_window = n_window
 		self.n = self.n_feats * self.n_window
@@ -542,7 +542,7 @@ class iTransformer(nn.Module):
 		super(iTransformer, self).__init__()
 		self.name = 'iTransformer'
 		self.lr = lr
-		self.batch = 5 # 1 if n_window > 1280 else int(1280 / n_window) # 128 for window size 10
+		self.batch = 24 # if n_window > 1280 else int(1280 / n_window) # 128 for window size 10
 		self.n_feats = feats
 		self.n_window = n_window
 		self.n = self.n_feats * self.n_window
@@ -551,13 +551,13 @@ class iTransformer(nn.Module):
 		self.pred_len = self.seq_len
 		self.output_attention = False
 		self.use_norm = True
-		self.d_model = 2 * feats  
+		self.d_model = 248  # 2 * feats  # 512
 		self.embed = 'TimeF'
 		self.freq = 's'
 		self.dropout = 0.1
 		self.n_heads = feats  # was done like this for other algos
 		self.e_layers = 2
-		self.d_ff = 128 # 16
+		self.d_ff = 1024 # 128 # 16
 		self.factor = 1  # attention factor
 		self.activation = 'gelu'
 		self.prob = prob 		# whether model gives back probabilistic output instead of single value

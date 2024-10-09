@@ -37,11 +37,19 @@ def load_dataset(dataset):
 		if dataset == 'MSL_new': file = 'C-1_' + file
 		if dataset == 'UCR': file = '136_' + file
 		if dataset == 'NAB': file = 'ec2_request_latency_system_failure_' + file
+		if dataset == 'IEEECIS': file = file + '_1'		# first naive version of this
+		if dataset == 'ATLAS_TS': 
+			if file=='train': file = 'lb_0_' + file
+			else: file = 'lb_1_' + file
 		loader.append(np.load(os.path.join(folder, f'{file}.npy')))
 	# loader = [i[:, debug:debug+1] for i in loader]
-	if args.less: loader[0] = cut_array(0.2, loader[0])
-	# if args.less: loader[1] = cut_array(0.5, loader[1])
-	# if args.less: loader[2] = cut_array(0.5, loader[2])
+	if dataset == 'SMD' and args.less:
+		loader[0] = cut_array(0.02, loader[0])
+		loader[1] = cut_array(0.02, loader[1])
+		loader[2] = cut_array(0.02, loader[2])
+	if args.less: loader[0] = cut_array(0.5, loader[0])
+	if args.less: loader[1] = cut_array(0.3, loader[1])
+	if args.less: loader[2] = cut_array(0.3, loader[2])
 	
 	train_loader = DataLoader(loader[0], batch_size=loader[0].shape[0])
 	test_loader = DataLoader(loader[1], batch_size=loader[1].shape[0])
@@ -313,12 +321,13 @@ def backprop(epoch, model, data, dataO, optimizer, scheduler, training = True):
 			return loss.detach().numpy(), z.detach().numpy()[0]
 	elif 'iTransformer' in model.name:
 		l = nn.MSELoss(reduction = 'none')
-		data_x = torch.DoubleTensor(data); dataset = TensorDataset(data_x, data_x)
-		bs = model.batch if training else len(data)
+		data_x = torch.DoubleTensor(data)
+		dataset = TensorDataset(data_x, data_x)
+		bs = model.batch # if training else len(data)
 		dataloader = DataLoader(dataset, batch_size = bs)
 		n = epoch + 1
-		l1s = []
 		if training:
+			l1s = []
 			for d, _ in dataloader:
 				local_bs = d.shape[0]
 				# don't invert d because we have permutation later in DataEmbedding_inverted as part of model
@@ -350,6 +359,8 @@ def backprop(epoch, model, data, dataO, optimizer, scheduler, training = True):
 			tqdm.write(f'Epoch {epoch},\tL1 = {np.mean(l1s)}')
 			return np.mean(l1s), optimizer.param_groups[0]['lr']
 		else:
+			l1s = torch.empty(0)
+			z_all = torch.empty(0)
 			for d, _ in dataloader:
 				local_bs = d.shape[0]
 				# don't invert d because we have permutation later in DataEmbedding_inverted
@@ -362,13 +373,18 @@ def backprop(epoch, model, data, dataO, optimizer, scheduler, training = True):
 					z_mu = z[0]
 					z_logsigma = z[1]
 					z = z_mu
-			# loss_fct = torch.nn.GaussianNLLLoss(eps=1e-6, reduction='none')
-			# loss = loss_fct(z, elem, torch.exp(2*z_logsigma))
-			loss = l(z, elem)
+				l1 = l(z, elem)[0]
+				# loss_fct = torch.nn.GaussianNLLLoss(eps=1e-6, reduction='none')
+				# l1 = loss_fct(z, elem, torch.exp(2*z_logsigma))
+				# l1 = l(z, elem)
+				l1s = torch.cat((l1s, l1), dim=0)
+				z_all = torch.cat((z_all, z[0]), dim=0)
+			loss = l1s.detach().numpy()			
+			# loss = np.reshape(l1s, (len(data), feats))
 			# if args.prob:
 			# 	z_std = torch.exp(z_logsigma)
-			# 	loss = loss / z_std  # + z_std
-			return loss.detach().numpy()[0], z.detach().numpy()[0] # because we have unnecessary third dimension
+			# 	loss = loss / z_std  #+ z_std
+			return loss, z_all.detach().numpy() # because we have unnecessary third dimension
 	else:
 		y_pred = model(data)
 		loss = l(y_pred, data)
@@ -391,7 +407,7 @@ if __name__ == '__main__':
 	model, optimizer, scheduler, epoch, accuracy_list = load_model(args.model, labels.shape[1], args.checkpoint)
 
 	# define path for results, checkpoints & plots & create directories
-	folder = f'studies3/{args.model}_{args.dataset}/n_window{args.n_window}'
+	folder = f'{args.model}_{args.dataset}/n_window{args.n_window}'
 	# folder = f'studies2.3/{args.model}_{args.dataset}/detectionlvl_{args.q}'
 	plot_path = f'{folder}/plots'
 	res_path = f'{folder}/results'
@@ -409,6 +425,7 @@ if __name__ == '__main__':
 
 	## Prepare data
 	trainD, testD = next(iter(train_loader)), next(iter(test_loader))
+	trainD, testD = trainD.to(torch.float64), testD.to(torch.float64)  # necessary because model in double precision, data should be as well
 	trainO, testO = trainD, testD
 	if model.name in ['Attention', 'DAGMM', 'USAD', 'MSCRED', 'CAE_M', 'GDN', 'MTAD_GAT', 'MAD_GAN', 'iTransformer'] or 'TranAD' in model.name: 
 		trainD, testD = convert_to_windows(trainD, model), convert_to_windows(testD, model)
@@ -418,7 +435,7 @@ if __name__ == '__main__':
 	### Training phase
 	if not args.test:
 		print(f'{color.HEADER}Training {args.model} on {args.dataset}{color.ENDC}')
-		num_epochs = 5; e = epoch + 1; start = time()
+		num_epochs = 20; e = epoch + 1; start = time()
 		for e in tqdm(list(range(epoch+1, epoch+num_epochs+1))):
 			lossT, lr = backprop(e, model, trainD, trainO, optimizer, scheduler)
 			accuracy_list.append((lossT, lr))
@@ -441,8 +458,12 @@ if __name__ == '__main__':
 	lossT, _ = backprop(0, model, trainD, trainO, optimizer, scheduler, training=False)
 	# local anomaly labels
 	df_res_local = pd.DataFrame()
+	preds = []
 	for i in range(loss.shape[1]):
-		lt, l, ls = lossT[:, i], loss[:, i], labels[:, i]
+		if args.dataset in ['IEEECIS']:
+			lt, l, ls = lossT[:, i], loss[:, i], labels[:]  # labels[i] for IEEECIS-TS
+		else:
+			lt, l, ls = lossT[:, i], loss[:, i], labels[:, i]  # labels[i] for IEEECIS-TS
 		result_local, pred = pot_eval(lt, l, ls, plot_path, f'dim{i}', q=args.q)
 		preds.append(pred)
 		df_res = pd.DataFrame.from_dict(result_local, orient='index').T
@@ -452,7 +473,7 @@ if __name__ == '__main__':
 	preds = np.array(preds).T
 	preds = preds.astype(int)
 	labelspred = (np.sum(preds, axis=1) >= 1) + 0
-	plot_ascore(plot_path, 'ascore_local', ascore=loss, labels=true_labels)
+	# plot_ascore(plot_path, 'ascore_local', ascore=loss, labels=true_labels)
 	plot_labels(plot_path, 'labels_local', y_pred=labelspred, y_true=true_labels)
 	plot_metrics(plot_path, 'metrics_local', y_pred=labelspred, y_true=true_labels)
 	result_local = calc_point2point(predict=labelspred, actual=true_labels)
@@ -481,7 +502,7 @@ if __name__ == '__main__':
 	# global anomaly labels
 	result_global, pred2 = pot_eval(lossTfinal, lossFinal, true_labels, plot_path, f'all_dim', q=args.q)
 	labelspred_glob = (pred2 >= 1) + 0
-	plot_ascore(plot_path, 'ascore_global', ascore=lossFinal, labels=true_labels)
+	# plot_ascore(plot_path, 'ascore_global', ascore=lossFinal, labels=true_labels)
 	plot_labels(plot_path, 'labels_global', y_pred=labelspred_glob, y_true=true_labels)
 	plot_metrics(plot_path, 'metrics_global', y_pred=labelspred_glob, y_true=true_labels)
 	metrics_global = calc_point2point(predict=labelspred_glob, actual=true_labels)

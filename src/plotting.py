@@ -23,7 +23,10 @@ def plotter(path, y_true, y_pred, ascore, labels):
 	if 'TranAD' in path: y_true = torch.roll(y_true, 1, 0)
 	pdf = PdfPages(f'{path}/output.pdf')
 	for dim in range(y_true.shape[1]):
-		y_t, y_p, l, a_s = y_true[:, dim], y_pred[:, dim], labels[:, dim], ascore[:, dim]
+		if 'IEEECIS' in path:
+			y_t, y_p, l, a_s = y_true[:, dim], y_pred[:, dim], labels[:], ascore[:, dim]
+		else:
+			y_t, y_p, l, a_s = y_true[:, dim], y_pred[:, dim], labels[:, dim], ascore[:, dim]
 		fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
 		ax1.set_ylabel('Value')
 		ax1.set_title(f'Dimension = {dim}')
@@ -146,3 +149,4 @@ def compare_labels(path, pred_labels, true_labels, plot_labels, name=''):
 	plt.savefig(f'{path}/compare_labels2{name}.png', dpi=300)
 	plt.close()
         
+
