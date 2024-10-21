@@ -19,6 +19,12 @@ parser.add_argument('--n_window',
 					required=False,
 					default=10,
                     help="number of timestamps in a window")
+parser.add_argument('--step_size', 
+					metavar='-step', 
+					type=int, 
+					required=False,
+					default=1,
+                    help="step size for sliding window")
 parser.add_argument('--q', 
 					metavar='-q', 
 					type=float, 

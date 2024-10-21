@@ -1,8 +1,7 @@
 import matplotlib.pyplot as plt
 import os
+import torch
 from src.constants import *
-import pandas as pd 
-import numpy as np
 
 class color:
     HEADER = '\033[95m'
@@ -14,22 +13,6 @@ class color:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
-def plot_accuracies(accuracy_list, folder):
-	os.makedirs(folder, exist_ok=True)
-	trainAcc = [i[0] for i in accuracy_list]
-	lrs = [i[1] for i in accuracy_list]
-	plt.xticks(range(len(trainAcc)))
-	plt.xlabel('Epochs')
-	plt.ylabel('Average Training Loss')
-	plt.plot(range(len(trainAcc)), trainAcc, label='Average Training Loss', linewidth=1, linestyle='-', marker='.')
-	plt.legend(loc='lower left')
-	ax2 = plt.twinx()
-	ax2.yaxis.set_label_position("right")
-	ax2.set_ylabel('Learning Rate', rotation=270, labelpad=10)
-	ax2.plot(range(len(lrs)), lrs, label='Learning Rate', color='r', linewidth=1, linestyle='--', marker='.')
-	ax2.legend(loc='upper right')
-	plt.savefig(f'{folder}/training-graph.pdf')
-	plt.clf()
 
 def cut_array(percentage, arr):
 	print(f'{color.BOLD}Slicing dataset to {int(percentage*100)}%{color.ENDC}')
@@ -37,11 +20,35 @@ def cut_array(percentage, arr):
 	window = round(arr.shape[0] * percentage * 0.5)
 	return arr[mid - window : mid + window, :]
 
-def getresults2(df, result):
-	results2, df1, df2 = {}, df.sum(), df.mean()
-	for a in ['FN', 'FP', 'TP', 'TN']:
-		results2[a] = df1[a]
-	for a in ['precision', 'recall']:
-		results2[a] = df2[a]
-	results2['f1*'] = 2 * results2['precision'] * results2['recall'] / (results2['precision'] + results2['recall'])
-	return results2
+def save_model(folder, model, optimizer, scheduler, epoch, accuracy_list):
+	os.makedirs(folder, exist_ok=True)
+	file_path = f'{folder}/model.ckpt'
+	torch.save({
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'scheduler_state_dict': scheduler.state_dict(),
+        'accuracy_list': accuracy_list}, file_path)
+
+def load_model(modelname, dims, path=None):
+	import src.models
+	model_class = getattr(src.models, modelname)
+	model = model_class(dims, args.n_window, args.prob).double()
+	optimizer = torch.optim.AdamW(model.parameters() , lr=model.lr, weight_decay=1e-5)
+	scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 5, 0.9)
+	if path is not None:
+		fname = os.path.join(path, 'model.ckpt')
+	else:
+		fname = f'{args.model}_{args.dataset}/n_window{args.n_window}/checkpoints/model.ckpt'
+	if (os.path.exists(fname) and not args.retrain) or args.test:
+		print(f"{color.GREEN}Loading pre-trained model: {model.name}{color.ENDC} from {fname}")
+		checkpoint = torch.load(fname)
+		model.load_state_dict(checkpoint['model_state_dict'])
+		optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+		scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+		epoch = checkpoint['epoch']
+		accuracy_list = checkpoint['accuracy_list']
+	else:
+		print(f"{color.GREEN}Creating new model: {model.name}{color.ENDC}")
+		epoch = -1; accuracy_list = []
+	return model, optimizer, scheduler, epoch, accuracy_list

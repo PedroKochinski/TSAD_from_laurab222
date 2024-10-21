@@ -548,16 +548,16 @@ class iTransformer(nn.Module):
 		self.n = self.n_feats * self.n_window
 		self.seq_len = self.n_window
 		self.label_len = self.n_window
-		self.pred_len = self.seq_len
+		self.pred_len = self.n_window
 		self.output_attention = False
 		self.use_norm = True
-		self.d_model = 248  # 2 * feats  # 512
+		self.d_model =  2 * feats  # 512
 		self.embed = 'TimeF'
 		self.freq = 's'
 		self.dropout = 0.1
 		self.n_heads = feats  # was done like this for other algos
 		self.e_layers = 2
-		self.d_ff = 1024 # 128 # 16
+		self.d_ff = 256 # 128 # 128 # 16
 		self.factor = 1  # attention factor
 		self.activation = 'gelu'
 		self.prob = prob 		# whether model gives back probabilistic output instead of single value
@@ -632,6 +632,6 @@ class iTransformer(nn.Module):
 			dec_logsigma = dec_logsigma[:, -1:, :].permute(1, 0, 2)  # [1, B, N], for AD only give back last element of window/sequence
 			return dec_mu, dec_logsigma
 		else:
-			dec_out = dec_out[:, -1:, :]  # [B, 1, N], for AD only give back last element of window/sequence
+			dec_out = dec_out[:, :, :]  # [B, 1, N], for AD only give back last element of window/sequence
 			out = dec_out.permute(1, 0, 2)  # [1, B, N], permute to have same output structure as other models
 			return out

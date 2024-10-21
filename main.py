@@ -1,99 +1,24 @@
 import os
 import pandas as pd
 from tqdm import tqdm
-from src.models import *
-from src.constants import *
-from src.plotting import *
-from src.pot import *
-from src.utils import *
-from src.diagnosis import *
-from src.merlin import *
-from torch.utils.data import Dataset, DataLoader, TensorDataset
+from torch.utils.data import DataLoader, TensorDataset
 import torch.nn as nn
 from time import time
 from pprint import pprint
 from torchinfo import summary
 
+from src.models import *
+from src.constants import *
+from src.plotting import *
+from src.pot import *
+from src.utils import load_model, save_model
+from src.diagnosis import *
+from src.merlin import *
+from src.data_loader import load_dataset, convert_to_windows_train, convert_to_windows_test
 
-def convert_to_windows(data, model):
-	windows = []; w_size = model.n_window
-	for i, g in enumerate(data): 
-		if i >= w_size: w = data[i-w_size:i]
-		else: w = torch.cat([data[0].repeat(w_size-i, 1), data[0:i]])
-		windows.append(w if model.name in ['TranAD', 'Attention', 'iTransformer'] else w.view(-1))
-		# windows.append(w if 'TranAD' in args.model or 'Attention' in args.model or 'iTransformer' in args.model else w.view(-1))
-	return torch.stack(windows)
 
-def load_dataset(dataset):
-	folder = os.path.join(output_folder, dataset)
-	if not os.path.exists(folder):
-		raise Exception('Processed Data not found.')
-	loader = []
-	for file in ['train', 'test', 'labels']:
-		if dataset == 'SMD': file = 'machine-1-1_' + file
-		if dataset == 'SMAP': file = 'P-1_' + file
-		if dataset == 'SMAP_new': file = 'P-1_' + file
-		if dataset == 'MSL': file = 'C-1_' + file
-		if dataset == 'MSL_new': file = 'C-1_' + file
-		if dataset == 'UCR': file = '136_' + file
-		if dataset == 'NAB': file = 'ec2_request_latency_system_failure_' + file
-		if dataset == 'IEEECIS': file = file + '_1'		# first naive version of this
-		if dataset == 'ATLAS_TS': 
-			if file=='train': file = 'lb_0_' + file
-			else: file = 'lb_1_' + file
-		loader.append(np.load(os.path.join(folder, f'{file}.npy')))
-	# loader = [i[:, debug:debug+1] for i in loader]
-	if dataset == 'SMD' and args.less:
-		loader[0] = cut_array(0.02, loader[0])
-		loader[1] = cut_array(0.02, loader[1])
-		loader[2] = cut_array(0.02, loader[2])
-	if args.less: loader[0] = cut_array(0.5, loader[0])
-	if args.less: loader[1] = cut_array(0.3, loader[1])
-	if args.less: loader[2] = cut_array(0.3, loader[2])
-	
-	train_loader = DataLoader(loader[0], batch_size=loader[0].shape[0])
-	test_loader = DataLoader(loader[1], batch_size=loader[1].shape[0])
-	labels = loader[2]
-	print('training set shape:', train_loader.dataset.shape)
-	print('test set shape:', test_loader.dataset.shape)
-	return train_loader, test_loader, labels
-
-def save_model(folder, model, optimizer, scheduler, epoch, accuracy_list):
-	os.makedirs(folder, exist_ok=True)
-	file_path = f'{folder}/model.ckpt'
-	torch.save({
-        'epoch': epoch,
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
-        'scheduler_state_dict': scheduler.state_dict(),
-        'accuracy_list': accuracy_list}, file_path)
-
-def load_model(modelname, dims, checkpoint=None):
-	import src.models
-	model_class = getattr(src.models, modelname)
-	model = model_class(dims, args.n_window, args.prob).double()
-	optimizer = torch.optim.AdamW(model.parameters() , lr=model.lr, weight_decay=1e-5)
-	scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 5, 0.9)
-	if checkpoint is not None:
-		fname = checkpoint
-	else:
-		fname = f'{args.model}_{args.dataset}/n_window{args.n_window}/checkpoints/model.ckpt'
-	if (os.path.exists(fname) and not args.retrain) or args.test:
-		print(f"{color.GREEN}Loading pre-trained model: {model.name}{color.ENDC} from {fname}")
-		checkpoint = torch.load(fname)
-		model.load_state_dict(checkpoint['model_state_dict'])
-		optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-		scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-		epoch = checkpoint['epoch']
-		accuracy_list = checkpoint['accuracy_list']
-	else:
-		print(f"{color.GREEN}Creating new model: {model.name}{color.ENDC}")
-		epoch = -1; accuracy_list = []
-	return model, optimizer, scheduler, epoch, accuracy_list
-
-def backprop(epoch, model, data, dataO, optimizer, scheduler, training = True):
+def backprop(epoch, model, data, feats, optimizer, scheduler, training = True):
 	l = nn.MSELoss(reduction = 'mean' if training else 'none')
-	feats = dataO.shape[1]
 	if 'DAGMM' in model.name:
 		l = nn.MSELoss(reduction = 'none')
 		compute = ComputeLoss(model, 0.1, 0.005, 'cpu', model.n_gmm)
@@ -331,7 +256,8 @@ def backprop(epoch, model, data, dataO, optimizer, scheduler, training = True):
 			for d, _ in dataloader:
 				local_bs = d.shape[0]
 				# don't invert d because we have permutation later in DataEmbedding_inverted as part of model
-				elem = d.permute(1, 0, 2)[-1, :, :].view(1, local_bs, feats)  # [1, B, N]
+				# elem = d.permute(1, 0, 2)[-1, :, :].view(1, local_bs, feats)  # [1, B, N]
+				elem = d.permute(1, 0, 2) # [n_window, B, N]
 				# if not l1s: 
 				# 	summary(model, input_size=[1, 10, 25])
 				if model.output_attention:
@@ -359,12 +285,13 @@ def backprop(epoch, model, data, dataO, optimizer, scheduler, training = True):
 			tqdm.write(f'Epoch {epoch},\tL1 = {np.mean(l1s)}')
 			return np.mean(l1s), optimizer.param_groups[0]['lr']
 		else:
-			l1s = torch.empty(0)
+			loss = torch.empty(0)
 			z_all = torch.empty(0)
 			for d, _ in dataloader:
 				local_bs = d.shape[0]
 				# don't invert d because we have permutation later in DataEmbedding_inverted
-				elem = d.permute(1, 0, 2)[-1, :, :].view(1, local_bs, feats)
+				# elem = d.permute(1, 0, 2)[-1, :, :].view(1, local_bs, feats)
+				elem = d.permute(1, 0, 2) # [n_window, B, N]
 				if model.output_attention:
 					z = model(d)[0]
 				else:
@@ -373,18 +300,17 @@ def backprop(epoch, model, data, dataO, optimizer, scheduler, training = True):
 					z_mu = z[0]
 					z_logsigma = z[1]
 					z = z_mu
-				l1 = l(z, elem)[0]
+				l1 = l(z, elem)
 				# loss_fct = torch.nn.GaussianNLLLoss(eps=1e-6, reduction='none')
 				# l1 = loss_fct(z, elem, torch.exp(2*z_logsigma))
-				# l1 = l(z, elem)
-				l1s = torch.cat((l1s, l1), dim=0)
-				z_all = torch.cat((z_all, z[0]), dim=0)
-			loss = l1s.detach().numpy()			
-			# loss = np.reshape(l1s, (len(data), feats))
+				loss = torch.cat((loss, l1.permute(1, 0, 2)), dim=0)
+				z_all = torch.cat((z_all, z.permute(1, 0, 2)), dim=0)
+			loss = loss.view((data.shape[0]* data.shape[1], feats))
+			z_all = z_all.view((data.shape[0]* data.shape[1], feats))
 			# if args.prob:
 			# 	z_std = torch.exp(z_logsigma)
 			# 	loss = loss / z_std  #+ z_std
-			return loss, z_all.detach().numpy() # because we have unnecessary third dimension
+			return loss.detach().numpy(), z_all.detach().numpy() # because we have unnecessary third dimension
 	else:
 		y_pred = model(data)
 		loss = l(y_pred, data)
@@ -401,13 +327,8 @@ def backprop(epoch, model, data, dataO, optimizer, scheduler, training = True):
 if __name__ == '__main__':
 	print(args, '\n')
 
-	train_loader, test_loader, labels = load_dataset(args.dataset)
-	if args.model in ['MERLIN']:
-		eval(f'run_{args.model.lower()}(test_loader, labels, args.dataset)')
-	model, optimizer, scheduler, epoch, accuracy_list = load_model(args.model, labels.shape[1], args.checkpoint)
-
 	# define path for results, checkpoints & plots & create directories
-	folder = f'{args.model}_{args.dataset}/n_window{args.n_window}'
+	folder = f'{args.model}_{args.dataset}/n_window{args.n_window}_steps{args.step_size}'
 	# folder = f'studies2.3/{args.model}_{args.dataset}/detectionlvl_{args.q}'
 	plot_path = f'{folder}/plots'
 	res_path = f'{folder}/results'
@@ -417,6 +338,12 @@ if __name__ == '__main__':
 		checkpoints_path = args.checkpoint
 	os.makedirs(plot_path, exist_ok=True)
 	os.makedirs(res_path, exist_ok=True)
+
+	train_loader, test_loader, labels, ts_lengths = load_dataset(args.dataset)
+	feats = train_loader.dataset.shape[1]
+	if args.model in ['MERLIN']:
+		eval(f'run_{args.model.lower()}(test_loader, labels, args.dataset)')
+	model, optimizer, scheduler, epoch, accuracy_list = load_model(args.model, feats, checkpoints_path)
 
 	# Calculate and print the number of parameters
 	total_params = sum(p.numel() for p in model.parameters())
@@ -428,16 +355,18 @@ if __name__ == '__main__':
 	trainD, testD = trainD.to(torch.float64), testD.to(torch.float64)  # necessary because model in double precision, data should be as well
 	trainO, testO = trainD, testD
 	if model.name in ['Attention', 'DAGMM', 'USAD', 'MSCRED', 'CAE_M', 'GDN', 'MTAD_GAT', 'MAD_GAN', 'iTransformer'] or 'TranAD' in model.name: 
-		trainD, testD = convert_to_windows(trainD, model), convert_to_windows(testD, model)
+		trainD = convert_to_windows_train(trainO, model, args.step_size, ts_lengths) # use windows shifted by step size for training
+		train_test, _ = convert_to_windows_test(trainO, model, labels=None, w_size=args.n_window)  # use non-overlapping windows for testing, need this for POT
+		testD, labels  = convert_to_windows_test(testD, model, labels, w_size=args.n_window)  # later use this: args.n_window)  # use non-overlapping windows for testing
 
 	# if model.name == 'iTransformer':
 	# 	summary(model, input_data=trainD, depth=5, verbose=1)
 	### Training phase
 	if not args.test:
 		print(f'{color.HEADER}Training {args.model} on {args.dataset}{color.ENDC}')
-		num_epochs = 20; e = epoch + 1; start = time()
+		num_epochs = 5; e = epoch + 1; start = time()
 		for e in tqdm(list(range(epoch+1, epoch+num_epochs+1))):
-			lossT, lr = backprop(e, model, trainD, trainO, optimizer, scheduler)
+			lossT, lr = backprop(e, model, trainD, feats, optimizer, scheduler)
 			accuracy_list.append((lossT, lr))
 		print(color.BOLD+'Training time: '+"{:10.4f}".format(time()-start)+' s'+color.ENDC)
 		save_model(checkpoints_path, model, optimizer, scheduler, e, accuracy_list)
@@ -447,23 +376,29 @@ if __name__ == '__main__':
 	torch.zero_grad = True
 	model.eval()
 	print(f'{color.HEADER}Testing {args.model} on {args.dataset}{color.ENDC}')
-	loss, y_pred = backprop(0, model, testD, testO, optimizer, scheduler, training=False)
+	loss, y_pred = backprop(0, model, testD, feats, optimizer, scheduler, training=False)
 
 	### Plot curves
 	# if not args.test:
 	if 'TranAD' in model.name: testO = torch.roll(testO, 1, 0) 
-	plotter(plot_path, testO, y_pred, loss, labels)
+	if feats < 40:
+		plotter(plot_path, testO, y_pred, loss, labels)
 
 	### Scores
-	lossT, _ = backprop(0, model, trainD, trainO, optimizer, scheduler, training=False)
+	lossT, _ = backprop(0, model, train_test, feats, optimizer, scheduler, training=False)  # need anomaly scores on training data for POT
+
+	# # if step_size > 1, define truth labels per window instead of per time stamp, can also just use non-overlapping windows for testing
+	# if args.step_size > 1:
+	# 	print(labels.shape, labels[labels[:,0]==1].shape, labels[labels[:,0]==0].shape)
+	# 	nb_windows = (len(labels) - args.n_window) // args.step_size
+	# 	labels = np.array([(np.sum(labels[i*args.step_size:i*args.step_size+args.n_window], axis=0) >= 1) + 0 for i in range(nb_windows)])
+	# 	print(labels.shape, labels[labels[:,0]==1].shape, labels[labels[:,0]==0].shape)
+
 	# local anomaly labels
 	df_res_local = pd.DataFrame()
 	preds = []
-	for i in range(loss.shape[1]):
-		if args.dataset in ['IEEECIS']:
-			lt, l, ls = lossT[:, i], loss[:, i], labels[:]  # labels[i] for IEEECIS-TS
-		else:
-			lt, l, ls = lossT[:, i], loss[:, i], labels[:, i]  # labels[i] for IEEECIS-TS
+	for i in range(feats):
+		lt, l, ls = lossT[:, i], loss[:, i], labels[:, i]  	
 		result_local, pred = pot_eval(lt, l, ls, plot_path, f'dim{i}', q=args.q)
 		preds.append(pred)
 		df_res = pd.DataFrame.from_dict(result_local, orient='index').T
@@ -475,7 +410,7 @@ if __name__ == '__main__':
 	labelspred = (np.sum(preds, axis=1) >= 1) + 0
 	# plot_ascore(plot_path, 'ascore_local', ascore=loss, labels=true_labels)
 	plot_labels(plot_path, 'labels_local', y_pred=labelspred, y_true=true_labels)
-	plot_metrics(plot_path, 'metrics_local', y_pred=labelspred, y_true=true_labels)
+	# plot_metrics(plot_path, 'metrics_local', y_pred=labelspred, y_true=true_labels)
 	result_local = calc_point2point(predict=labelspred, actual=true_labels)
 	result_local1 = {'f1': result_local[0], 'precision': result_local[1], 'recall': result_local[2], 
 				  'TP': result_local[3], 'TN': result_local[4], 'FP': result_local[5], 'FN': result_local[6], 
@@ -488,7 +423,7 @@ if __name__ == '__main__':
 	majority = math.ceil(labels.shape[1] / 2)
 	labelspred_maj = (np.sum(preds, axis=1) >= majority) + 0
 	plot_labels(plot_path, 'labels_local_maj', y_pred=labelspred_maj, y_true=true_labels)
-	plot_metrics(plot_path, 'metrics_local_maj', y_pred=labelspred_maj, y_true=true_labels)
+	# plot_metrics(plot_path, 'metrics_local_maj', y_pred=labelspred_maj, y_true=true_labels)
 	result_local = calc_point2point(predict=labelspred_maj, actual=true_labels)
 	result_local2 = {'f1': result_local[0], 'precision': result_local[1], 'recall': result_local[2], 
 				  'TP': result_local[3], 'TN': result_local[4], 'FP': result_local[5], 'FN': result_local[6], 
@@ -497,20 +432,23 @@ if __name__ == '__main__':
 	print('\nlocal results with majority voting')
 	pprint(result_local2)
 	temp = np.where(labelspred_maj != true_labels)
-	print(temp, np.all(labelspred_maj == true_labels))
+	# print(temp, np.all(labelspred_maj == true_labels))
 
 	# global anomaly labels
 	result_global, pred2 = pot_eval(lossTfinal, lossFinal, true_labels, plot_path, f'all_dim', q=args.q)
 	labelspred_glob = (pred2 >= 1) + 0
 	# plot_ascore(plot_path, 'ascore_global', ascore=lossFinal, labels=true_labels)
 	plot_labels(plot_path, 'labels_global', y_pred=labelspred_glob, y_true=true_labels)
-	plot_metrics(plot_path, 'metrics_global', y_pred=labelspred_glob, y_true=true_labels)
+	# plot_metrics(plot_path, 'metrics_global', y_pred=labelspred_glob, y_true=true_labels)
 	metrics_global = calc_point2point(predict=labelspred_glob, actual=true_labels)
 	result_global.update(hit_att(loss, labels))
 	result_global.update(ndcg(loss, labels))
 	result_global.update({'detection level q': args.q})
 	print('\nglobal results') 
 	pprint(result_global)
+
+	plot_metrics(plot_path, ['local (incl. OR)', 'local (maj. voting)', 'global'], 
+			  y_pred=[labelspred, labelspred_maj, labelspred_glob], y_true=true_labels)
 
 	# compare local & global anomaly labels
 	compare_labels(plot_path, pred_labels=[labelspred, labelspred_maj], true_labels=true_labels, 
