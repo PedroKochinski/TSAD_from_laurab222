@@ -29,6 +29,8 @@ def convert_to_windows_train(data, model, step_size=1, ts_lengths=[]):
 		windows = torch.tensor([])
 		if ts_lengths == [] or ts_lengths[0] == []:    # check lengths of individual time series, otherwise assume data is one time series
 			ts_lengths = [len(data)]
+		else:
+			ts_lengths = ts_lengths[0]  # because 1st element contains lengths of train TS, 2nd of test TS
 		start = 0
 		for l in ts_lengths:
 			nb_windows = math.ceil((l - w_size) / step_size)  # get number of complete windows with window size w_size and step size step_size 

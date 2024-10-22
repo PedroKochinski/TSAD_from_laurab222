@@ -542,7 +542,7 @@ class iTransformer(nn.Module):
 		super(iTransformer, self).__init__()
 		self.name = 'iTransformer'
 		self.lr = lr
-		self.batch = 24 # if n_window > 1280 else int(1280 / n_window) # 128 for window size 10
+		self.batch = 4 # if n_window > 1280 else int(1280 / n_window) # 128 for window size 10
 		self.n_feats = feats
 		self.n_window = n_window
 		self.n = self.n_feats * self.n_window
