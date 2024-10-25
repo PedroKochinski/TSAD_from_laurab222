@@ -542,7 +542,7 @@ class iTransformer(nn.Module):
 		super(iTransformer, self).__init__()
 		self.name = 'iTransformer'
 		self.lr = lr
-		self.batch = 4 # if n_window > 1280 else int(1280 / n_window) # 128 for window size 10
+		self.batch = 10 # 24 # if n_window > 1280 else int(1280 / n_window) # 128 for window size 10
 		self.n_feats = feats
 		self.n_window = n_window
 		self.n = self.n_feats * self.n_window
@@ -557,7 +557,7 @@ class iTransformer(nn.Module):
 		self.dropout = 0.1
 		self.n_heads = feats  # was done like this for other algos
 		self.e_layers = 2
-		self.d_ff = 256 # 128 # 128 # 16
+		self.d_ff = 128 # 128 # 16
 		self.factor = 1  # attention factor
 		self.activation = 'gelu'
 		self.prob = prob 		# whether model gives back probabilistic output instead of single value

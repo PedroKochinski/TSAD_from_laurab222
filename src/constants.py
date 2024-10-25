@@ -17,6 +17,8 @@ lm_d = {
 		'MBA': [(0.87, 1), (0.93, 1.04)],
         'IEEECIS': [(0.95, 1), (0.99, 1)],
         'IEEECIS_new': [(0.96, 1), (0.99, 1)],
+        'IEEECIS_pca': [(0.96, 1), (0.99, 1)],
+        'IEEECIS_pca_scaled': [(0.96, 1), (0.99, 1)],
         'ATLAS_TS':  [(0.9995, 1.04), (0.99995, 1.06)],
         'GECCO':  [(0.9995, 1.04), (0.99995, 1.06)],
 	}
@@ -38,6 +40,8 @@ lr_d = {
 		'MBA': 0.001, 
         'IEEECIS': 0.001,
         'IEEECIS_new': 0.001,
+        'IEEECIS_pca': 0.001,
+        'IEEECIS_pca_scaled': 0.001,
 		'ATLAS_TS': 0.0001,
         'GECCO': 0.0001
 	}
@@ -59,6 +63,8 @@ percentiles = {
 		'MBA': (99, 2),
         'IEEECIS': (98, 2),
         'IEEECIS_new': (97, 3),
+        'IEEECIS_pca': (97, 3),
+        'IEEECIS_pca_scaled': (97, 3),
         'ATLAS_TS': (98, 2000),
 		'GECCO': (98, 2000)
 	}

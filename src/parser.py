@@ -31,6 +31,12 @@ parser.add_argument('--q',
 					required=False,
 					default=1e-5,
                     help="detection level (risk) for POT method")
+parser.add_argument('--epochs', 
+					metavar='-e', 
+					type=int, 
+					required=False,
+					default=5,
+                    help="number of training epochs")
 parser.add_argument('--checkpoint', 
                     required=False,
                     default=None,

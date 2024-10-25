@@ -82,18 +82,16 @@ def load_dataset(dataset):
 		elif dataset == 'UCR': file = '136_' + file
 		elif dataset == 'NAB': file = 'ec2_request_latency_system_failure_' + file
 		elif dataset == 'IEEECIS': file = file + '_1'		# first naive version of this
-		elif dataset == 'IEEECIS_new': 					    # time series of users
+		elif dataset in ['IEEECIS_new', 'IEEECIS_pca', 'IEEECIS_pca_scaled']: 					    # time series of users
 			paths = glob.glob(os.path.join(folder, f'{file}_*.npy'))
 			paths = sorted(paths)               # sort paths to ensure correct order, otherwise labels & test files are mismatched
 			loader.append(np.concatenate([np.load(p) for p in paths]))
 			ts_lengths.append([np.load(p).shape[0] for p in paths])
-			# if file=='train': file = file + '_1137.0_299.0_-480.0'
-			# else: file = file + '_15885.0_nan_176.0'
 		elif dataset == 'ATLAS_TS': 
 			if file=='train': file = 'lb_0_' + file
 			else: file = 'lb_1_' + file
 		
-		if dataset not in ['IEEECIS_new']:
+		if dataset not in ['IEEECIS_new', 'IEEECIS_pca', 'IEEECIS_pca_scaled']:
 			loader.append(np.load(os.path.join(folder, f'{file}.npy')))
 
 	if dataset in ['SMD', 'IEEECIS'] and args.less:
@@ -104,6 +102,11 @@ def load_dataset(dataset):
 		loader[0] = cut_array(0.5, loader[0])
 		loader[1] = cut_array(0.3, loader[1])
 		loader[2] = cut_array(0.3, loader[2])
+
+	if dataset in ['IEEECIS_new', 'IEEECIS_pca_scaled']:
+		print(f'data set has {loader[0].shape[1]} features, only using 100')
+		for i in range(2):
+			loader[i] = loader[i][:,:100]
 	
 	train_loader = DataLoader(loader[0], batch_size=loader[0].shape[0])
 	test_loader = DataLoader(loader[1], batch_size=loader[1].shape[0])
