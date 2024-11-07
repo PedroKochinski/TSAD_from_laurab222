@@ -40,7 +40,7 @@ def smooth(y, box_pts=1):
     y_smooth = np.convolve(y, box, mode='same')
     return y_smooth
 
-def plotter(path, y_true, y_pred, ascore, labels):
+def plotter(path, y_true, y_pred, ascore, labels, ts_length=[]):
 	os.makedirs(path, exist_ok=True)
 	if 'TranAD' in path: y_true = torch.roll(y_true, 1, 0)
 	pdf = PdfPages(f'{path}/output.pdf')
@@ -60,6 +60,12 @@ def plotter(path, y_true, y_pred, ascore, labels):
 			# ax3.legend(ncol=1, bbox_to_anchor=(0.3, 1.5))
 			ax1.legend(ncol=2, bbox_to_anchor=(0.35, 1.5))
 			ax3.legend(ncol=1, bbox_to_anchor=(0.95, 1.5))
+			if ts_length != []:
+				# sum up previous entries in ts_length to get the end of each time series
+				start = 0
+				for x in np.cumsum(ts_length):
+					ax1.axvline(x=x, color='k', linestyle=':', label='End of time series')
+					start += x
 		ax2.plot(smooth(a_s))
 		ax2.set_xlabel('Timestamp')
 		ax2.set_ylabel('Anomaly Score', labelpad=20, ha='center', va='center')

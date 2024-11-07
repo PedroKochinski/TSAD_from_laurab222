@@ -144,7 +144,7 @@ def pot_eval(init_score, score, label, path='./plots', name='pot_plot', q=1e-5, 
     ret = s.run(dynamic=False)  # run
     # print(len(ret['alarms']))
     # print(len(ret['thresholds']))
-    s.plot(ret, f'{path}/spot', name)
+    # s.plot(ret, f'{path}/spot', name)
     pot_th = np.mean(ret['thresholds']) * lm[1]
     # pot_th = np.percentile(score, 100 * lm[0])
     # np.percentile(score, 100 * lm[0])

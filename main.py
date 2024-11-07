@@ -14,7 +14,7 @@ from src.pot import *
 from src.utils import load_model, save_model
 from src.diagnosis import *
 from src.merlin import *
-from src.data_loader import load_dataset, convert_to_windows_train, convert_to_windows_test
+from src.data_loader import load_dataset, convert_to_windows_new
 
 
 def backprop(epoch, model, data, feats, optimizer, scheduler, training = True):
@@ -324,12 +324,48 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training = True):
 		else:
 			return loss.detach().numpy(), y_pred.detach().numpy()
 
+
+def local_pot(loss, lossT, labels, q):
+	# get anomaly labels
+	df_res_local = pd.DataFrame()
+	preds = []
+	for i in range(feats):
+		lt, l, ls = lossT[:, i], loss[:, i], labels[:, i]  	
+		result_local, pred = pot_eval(lt, l, ls, plot_path, f'dim{i}', q=q)
+		preds.append(pred)
+		df_res = pd.DataFrame.from_dict(result_local, orient='index').T
+		df_res_local = pd.concat([df_res_local, df_res], ignore_index=True)
+	preds = np.array(preds).T
+	preds = preds.astype(int)
+	return preds, df_res_local
+
+
+def local_anomaly_labels(preds, labels, q, plot_path=None, nb_adim=1):
+	labelspred = (np.sum(preds, axis=1) >= nb_adim) + 0
+
+	if plot_path is not None:
+		plot_labels(plot_path, f'labels_adim{nb_adim}', y_pred=labelspred, y_true=labels)
+	
+	result_local = calc_point2point(predict=labelspred, actual=labels)
+	result_local1 = {'f1': result_local[0], 'precision': result_local[1], 'recall': result_local[2], 
+				'TP': result_local[3], 'TN': result_local[4], 'FP': result_local[5], 'FN': result_local[6], 
+				'ROC/AUC': result_local[7], 'MCC': result_local[8]}
+	result_local1.update({'detection level q': q})
+	print(f'local results with {nb_adim} anomalous dimensions for anomaly')
+	pprint(result_local1)
+
+	return labelspred, result_local1
+
+
 if __name__ == '__main__':
 	print(args, '\n')
 
 	# define path for results, checkpoints & plots & create directories
-	folder = f'{args.model}_{args.dataset}/n_window{args.n_window}_steps{args.step_size}_eps{args.epochs}'
-	# folder = f'studies2.3/{args.model}_{args.dataset}/detectionlvl_{args.q}'
+	if args.name is not None:
+		folder = f'{args.model}_{args.dataset}/n_window{args.n_window}_steps{args.step_size}_feats{args.feats}_eps{args.epochs}_{args.name}'
+	else:
+		folder = f'{args.model}_{args.dataset}/n_window{args.n_window}_steps{args.step_size}_feats{args.feats}_eps{args.epochs}'
+		# folder = f'studies2.3/{args.model}_{args.dataset}/detectionlvl_{args.q}'
 	plot_path = f'{folder}/plots'
 	res_path = f'{folder}/results'
 	if args.checkpoint is None:
@@ -339,7 +375,7 @@ if __name__ == '__main__':
 	os.makedirs(plot_path, exist_ok=True)
 	os.makedirs(res_path, exist_ok=True)
 
-	train_loader, test_loader, labels, ts_lengths = load_dataset(args.dataset)
+	train_loader, test_loader, labels, ts_lengths = load_dataset(args.dataset, args.feats, args.less)
 	feats = train_loader.dataset.shape[1]
 	if args.model in ['MERLIN']:
 		eval(f'run_{args.model.lower()}(test_loader, labels, args.dataset)')
@@ -363,9 +399,9 @@ if __name__ == '__main__':
 	trainD, testD = trainD.to(torch.float64), testD.to(torch.float64)  # necessary because model in double precision, data should be as well
 	trainO, testO = trainD, testD
 	if model.name in ['Attention', 'DAGMM', 'USAD', 'MSCRED', 'CAE_M', 'GDN', 'MTAD_GAT', 'MAD_GAN', 'iTransformer'] or 'TranAD' in model.name: 
-		trainD = convert_to_windows_train(trainO, model, args.step_size, ts_lengths) 				 # use windows shifted by step size for training
-		train_test, _ = convert_to_windows_test(trainO, model, labels=None, w_size=args.n_window)	 # use non-overlapping windows for testing, need this for POT
-		testD, labels  = convert_to_windows_test(testD, model, labels, w_size=args.n_window) 		 # use non-overlapping windows for testing
+		trainD, _ = convert_to_windows_new(trainO, model, window_size=args.n_window, step_size=args.step_size, ts_lengths=ts_lengths[0]) 				 # use windows shifted by step size for training
+		train_test, train_ts_lengths = convert_to_windows_new(trainO, model, window_size=args.n_window, step_size=args.n_window, ts_lengths=ts_lengths[0])	 # use non-overlapping windows for testing, need this for POT
+		testD, test_ts_lengths  = convert_to_windows_new(testD, model, window_size=args.n_window, step_size=args.n_window, ts_lengths=ts_lengths[1]) 		 # use non-overlapping windows for testing
 
 	# if model.name == 'iTransformer':
 	# 	summary(model, input_data=trainD, depth=5, verbose=1)
@@ -384,16 +420,37 @@ if __name__ == '__main__':
 	torch.zero_grad = True
 	model.eval()
 	print(f'{color.HEADER}Testing {args.model} on {args.dataset}{color.ENDC}')
+
+	### Scores
+	lossT, _ = backprop(0, model, train_test, feats, optimizer, scheduler, training=False)  # need anomaly scores on training data for POT
 	loss, y_pred = backprop(0, model, testD, feats, optimizer, scheduler, training=False)
+
+	print(lossT.shape, loss.shape, labels.shape)
+	if model.name == 'iTransformer':
+		# cut out the padding from test data, loss tensors
+		lossT_tmp, loss_tmp, y_pred_tmp = [], [], []
+		start = 0
+		for i, l in enumerate(ts_lengths[1]):
+			ideal_len = test_ts_lengths[i]
+			loss_tmp.append(loss[start:start+l])
+			y_pred_tmp.append(y_pred[start:start+l])
+			start += ideal_len
+
+		for i, l in enumerate(ts_lengths[0]):
+			ideal_len = train_ts_lengths[i]
+			lossT_tmp.append(lossT[start:start+l])
+			start += ideal_len
+
+		lossT = np.concatenate(lossT_tmp, axis=0)
+		loss = np.concatenate(loss_tmp, axis=0)
+		y_pred = np.concatenate(y_pred_tmp, axis=0)
+	print(lossT.shape, loss.shape, labels.shape)
 
 	### Plot curves
 	# if not args.test:
 	if 'TranAD' in model.name: testO = torch.roll(testO, 1, 0) 
 	if feats <= 40:
-		plotter(plot_path, testO, y_pred, loss, labels)
-
-	### Scores
-	lossT, _ = backprop(0, model, train_test, feats, optimizer, scheduler, training=False)  # need anomaly scores on training data for POT
+		plotter(plot_path, testO, y_pred, loss, labels, ts_lengths[1])
 
 	# # if step_size > 1, define truth labels per window instead of per time stamp, can also just use non-overlapping windows for testing
 	# if args.step_size > 1:
@@ -402,52 +459,35 @@ if __name__ == '__main__':
 	# 	labels = np.array([(np.sum(labels[i*args.step_size:i*args.step_size+args.n_window], axis=0) >= 1) + 0 for i in range(nb_windows)])
 	# 	print(labels.shape, labels[labels[:,0]==1].shape, labels[labels[:,0]==0].shape)
 
-	# local anomaly labels
-	df_res_local = pd.DataFrame()
-	preds = []
-	for i in range(feats):
-		lt, l, ls = lossT[:, i], loss[:, i], labels[:, i]  	
-		result_local, pred = pot_eval(lt, l, ls, plot_path, f'dim{i}', q=args.q)
-		preds.append(pred)
-		df_res = pd.DataFrame.from_dict(result_local, orient='index').T
-		df_res_local = pd.concat([df_res_local, df_res], ignore_index=True)
-	lossTfinal, lossFinal = np.mean(lossT, axis=1), np.mean(loss, axis=1)
+	### anomaly labels
+	preds, df_res_local = local_pot(loss, lossT, labels, args.q)
 	true_labels = (np.sum(labels, axis=1) >= 1) + 0
-	preds = np.array(preds).T
-	preds = preds.astype(int)
-	labelspred = (np.sum(preds, axis=1) >= 1) + 0
-	# plot_ascore(plot_path, 'ascore_local', ascore=loss, labels=true_labels)
-	plot_labels(plot_path, 'labels_local', y_pred=labelspred, y_true=true_labels)
-	# plot_metrics(plot_path, 'metrics_local', y_pred=labelspred, y_true=true_labels)
-	result_local = calc_point2point(predict=labelspred, actual=true_labels)
-	result_local1 = {'f1': result_local[0], 'precision': result_local[1], 'recall': result_local[2], 
-				  'TP': result_local[3], 'TN': result_local[4], 'FP': result_local[5], 'FN': result_local[6], 
-				  'ROC/AUC': result_local[7], 'MCC': result_local[8]}
-	result_local1.update({'detection level q': args.q})
-	print('local results')
-	pprint(result_local1)
+	# local anomaly labels
+	labelspred, result_local1 = local_anomaly_labels(preds, true_labels, args.q, plot_path, nb_adim=1)
+	majority = math.ceil(labels.shape[1] / 2)	# do majority voting over dimensions for local results instead of inclusive OR
+	labelspred_maj, result_local2 = local_anomaly_labels(preds, true_labels, args.q, plot_path, nb_adim=majority)
+	labelspred_all = []
+	results_all = pd.DataFrame()
 
-	# do majority voting over dimensions for local results instead of inclusive OR
-	majority = math.ceil(labels.shape[1] / 2)
-	labelspred_maj = (np.sum(preds, axis=1) >= majority) + 0
-	plot_labels(plot_path, 'labels_local_maj', y_pred=labelspred_maj, y_true=true_labels)
-	# plot_metrics(plot_path, 'metrics_local_maj', y_pred=labelspred_maj, y_true=true_labels)
-	result_local = calc_point2point(predict=labelspred_maj, actual=true_labels)
-	result_local2 = {'f1': result_local[0], 'precision': result_local[1], 'recall': result_local[2], 
-				  'TP': result_local[3], 'TN': result_local[4], 'FP': result_local[5], 'FN': result_local[6], 
-				  'ROC/AUC': result_local[7], 'MCC': result_local[8]}
-	result_local2.update({'detection level q': args.q})
-	print('\nlocal results with majority voting')
-	pprint(result_local2)
-	temp = np.where(labelspred_maj != true_labels)
-	# print(temp, np.all(labelspred_maj == true_labels))
+	if feats > 20:
+		nb_adim = np.unique(np.concatenate((np.arange(1, 11), np.arange(20, feats, 10), [feats])))
+	else:
+		nb_adim = np.arange(1, feats+1)
+	for i in nb_adim:
+		lpred, res = local_anomaly_labels(preds, true_labels, args.q, plot_path, nb_adim=i)
+		labelspred_all.append(lpred)
+		results_all = pd.concat([results_all, pd.DataFrame.from_dict(res, orient='index').T], ignore_index=True)
+	
+	results_all.index = nb_adim
+	results_all.to_csv(f'{res_path}/res_local_all.csv')
 
 	# global anomaly labels
+	lossTfinal, lossFinal = np.mean(lossT, axis=1), np.mean(loss, axis=1)
+	true_labels = (np.sum(labels, axis=1) >= 1) + 0
 	result_global, pred2 = pot_eval(lossTfinal, lossFinal, true_labels, plot_path, f'all_dim', q=args.q)
 	labelspred_glob = (pred2 >= 1) + 0
-	# plot_ascore(plot_path, 'ascore_global', ascore=lossFinal, labels=true_labels)
+
 	plot_labels(plot_path, 'labels_global', y_pred=labelspred_glob, y_true=true_labels)
-	# plot_metrics(plot_path, 'metrics_global', y_pred=labelspred_glob, y_true=true_labels)
 	metrics_global = calc_point2point(predict=labelspred_glob, actual=true_labels)
 	result_global.update(hit_att(loss, labels))
 	result_global.update(ndcg(loss, labels))
@@ -459,8 +499,6 @@ if __name__ == '__main__':
 			  y_pred=[labelspred, labelspred_maj, labelspred_glob], y_true=true_labels)
 
 	# compare local & global anomaly labels
-	compare_labels(plot_path, pred_labels=[labelspred, labelspred_maj], true_labels=true_labels, 
-				plot_labels=['Local anomaly\n(inclusive OR)', 'Local anomaly\n(majority voting)'], name='_loc_vs_maj')
 	compare_labels(plot_path, pred_labels=[labelspred, labelspred_maj, labelspred_glob], true_labels=true_labels, 
 				plot_labels=['Local anomaly\n(inclusive OR)', 'Local anomaly\n(majority voting)', 'Global anomaly'], name='_all')
 

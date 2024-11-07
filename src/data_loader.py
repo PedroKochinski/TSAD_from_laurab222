@@ -3,10 +3,26 @@ import glob
 import math
 import torch
 import numpy as np
-from torch.utils.data import Dataset, DataLoader, TensorDataset
+from torch.utils.data import DataLoader
 
 from src.utils import *
 from src.constants import *
+
+
+file_prefixes = {
+	'SMD': 'machine-1-1_',
+	'SMAP': 'P-1_',
+	'SMAP_new': 'P-1_',
+	'MSL': 'C-1_',
+	'MSL_new': 'C-1_',
+	'UCR': '136_',
+	'NAB': 'ec2_request_latency_system_failure_',
+	'IEEECIS': '',
+	'IEEECIS_new': '',
+	'IEEECIS_pca': '',
+	'IEEECIS_pca_scaled': '',
+	'ATLAS_TS': '',
+}
 
 
 def convert_to_windows(data, model): # old version
@@ -18,95 +34,80 @@ def convert_to_windows(data, model): # old version
 	return torch.stack(windows)
 
 
-def convert_to_windows_train(data, model, step_size=1, ts_lengths=[]):
-	""" convert data to windows
-	if step_size > 1, create overlapping windows shifted by step_size (if step_size = w_size, no overlap)
-	or if step_size = 1, only one new element per window with all the rest of the window overlapping """
-	
-	w_size = model.n_window
-	
-	if model.name in ['Attention', 'iTransformer']: 
+def convert_to_windows_new(data, model, window_size=10, step_size=1, ts_lengths=[]):
+	"""
+	Converts the input time series data into overlapping (except if window_size == step_size) windows.
+	Parameters:
+	data (torch.Tensor): The input time series data.
+	model (object): The model object which contains the model name.
+	window_size (int, optional): The size of each window. Default is 10.
+	step_size (int, optional): The step size between consecutive windows. Default is 1.
+	ts_lengths (list, optional): A list containing the lengths of individual time series. Default is an empty list.
+	Returns:
+	tuple: A tuple containing:
+		- windows (torch.Tensor): The tensor containing the windows of the time series data.
+		- ideal_lengths (list): A list containing the ideal lengths of the padded time series.
+	"""
+
+	ideal_lengths = []
+	if model.name in ['iTransformer']: 
 		windows = torch.tensor([])
 		if ts_lengths == [] or ts_lengths[0] == []:    # check lengths of individual time series, otherwise assume data is one time series
 			ts_lengths = [len(data)]
-		else:
-			ts_lengths = ts_lengths[0]  # because 1st element contains lengths of train TS, 2nd of test TS
 		start = 0
 		for l in ts_lengths:
-			nb_windows = math.ceil((l - w_size) / step_size)  # get number of complete windows with window size w_size and step size step_size 
-			if nb_windows <= 0: nb_windows = 1                 # if not enough data for one window, create one window with zero padding
-			ideal_len = nb_windows * w_size
+			nb_windows = math.ceil((l - window_size) / step_size) + 1  # get number of complete windows with window size window_size and step size step_size + 1 incomplete
+			if nb_windows <= 0: nb_windows = 1                    	   # if not enough data for one window, create one window with padding
+			ideal_len = (nb_windows - 1) * step_size + window_size     # length of padded time series
+			ideal_lengths.append(ideal_len)
 			ts = data[start:start+l]  # separate the individual time series before slicing it into windows to avoid overlap
-			ts = torch.nn.functional.pad(ts, (0, 0, 0, ideal_len - l), 'constant', 0) # zero pad to have a multiple of w_size
-			new_window = torch.stack([ts[i*step_size:i*step_size+w_size] for i in range(nb_windows)])
+			# ts = torch.nn.functional.pad(ts, (0, 0, 0, ideal_len - l), 'constant', 0) # zero pad to have a multiple of window_size
+			ts = torch.cat((ts, ts[-1].repeat(ideal_len - l, 1)), axis=0)  # pad with last element to have a multiple of window_size
+			new_window = torch.stack([ts[i*step_size:i*step_size+window_size] for i in range(nb_windows)])
 			windows = torch.cat((windows, new_window), axis=0)
 			start += l
 	else:  # alternative version where first few windows repeat the first element, then always have 1 new element per window
 		windows = convert_to_windows(data, model)
 
-	return windows
+	return windows, ideal_lengths
 
 
-def convert_to_windows_test(data, model, labels=None, w_size=10):
-		
-	if model.name in ['Attention', 'iTransformer']: 
-		windows = torch.tensor([])
-		l = len(data)
-		nb_windows = math.ceil(l / w_size)  # get number of complete windows with window size w_size
-		if nb_windows <= 0: nb_windows = 1                 # if not enough data for one window, create one window with zero padding
-		ideal_len = nb_windows * w_size
-		if labels is not None:
-			labels = np.pad(labels,((0, ideal_len - l), (0, 0)), 'constant', constant_values=0) # zero pad such that labels have same length as test
-		data = torch.nn.functional.pad(data, (0, 0, 0, ideal_len - l), 'constant', 0) # zero pad to have a multiple of w_size
-		new_window = torch.stack([data[i*w_size:(i+1)*w_size] for i in range(nb_windows)])
-		windows = torch.cat((windows, new_window), axis=0)
-	
-	else:  # alternative version where first few windows repeat the first element, then always have 1 new element per window
-		windows = convert_to_windows(data, model)
-
-	return windows, labels
-
-
-def load_dataset(dataset):
+def load_dataset(dataset, feats=-1, less=False):
 	folder = os.path.join(output_folder, dataset)
 	if not os.path.exists(folder):
 		raise Exception('Processed Data not found.')
 	loader = []
 	ts_lengths = []
+
+	#TODO fix ATLAS_TS loader 
 	for file in ['train', 'test', 'labels']:
-		if dataset == 'SMD': file = 'machine-1-1_' + file
-		elif dataset == 'SMAP': file = 'P-1_' + file
-		elif dataset == 'SMAP_new': file = 'P-1_' + file
-		elif dataset == 'MSL': file = 'C-1_' + file
-		elif dataset == 'MSL_new': file = 'C-1_' + file
-		elif dataset == 'UCR': file = '136_' + file
-		elif dataset == 'NAB': file = 'ec2_request_latency_system_failure_' + file
-		elif dataset == 'IEEECIS': file = file + '_1'		# first naive version of this
-		elif dataset in ['IEEECIS_new', 'IEEECIS_pca', 'IEEECIS_pca_scaled']: 					    # time series of users
-			paths = glob.glob(os.path.join(folder, f'{file}_*.npy'))
-			paths = sorted(paths)               # sort paths to ensure correct order, otherwise labels & test files are mismatched
-			loader.append(np.concatenate([np.load(p) for p in paths]))
-			ts_lengths.append([np.load(p).shape[0] for p in paths])
-		elif dataset == 'ATLAS_TS': 
-			if file=='train': file = 'lb_0_' + file
-			else: file = 'lb_1_' + file
-		
-		if dataset not in ['IEEECIS_new', 'IEEECIS_pca', 'IEEECIS_pca_scaled']:
+		if dataset in file_prefixes:
+			prefix = file_prefixes[dataset]
+			if dataset in ['IEEECIS_new', 'IEEECIS_pca', 'IEEECIS_pca_scaled', 'ATLAS_TS']:
+				paths = glob.glob(os.path.join(folder, f'*{file}*.npy'))
+				paths = sorted(paths)  # sort paths to ensure correct order, otherwise labels & test files are mismatched
+				if dataset in ['ATLAS_TS'] and file == 'train' and less:
+					paths = [paths[0]]
+				loader.append(np.concatenate([np.load(p) for p in paths]))
+				ts_lengths.append([np.load(p).shape[0] for p in paths])
+			else:
+				loader.append(np.load(os.path.join(folder, f'{prefix}{file}.npy')))
+		else:
 			loader.append(np.load(os.path.join(folder, f'{file}.npy')))
 
-	if dataset in ['SMD', 'IEEECIS'] and args.less:
+	if dataset in ['SMD', 'IEEECIS'] and less:
 		loader[0] = cut_array(0.02, loader[0])
 		loader[1] = cut_array(0.02, loader[1])
 		loader[2] = cut_array(0.02, loader[2])
-	elif args.less: 
+	elif less and dataset not in ['ATLAS_TS']: 
 		loader[0] = cut_array(0.5, loader[0])
 		loader[1] = cut_array(0.3, loader[1])
 		loader[2] = cut_array(0.3, loader[2])
 
-	if dataset in ['IEEECIS_new', 'IEEECIS_pca_scaled']:
-		print(f'data set has {loader[0].shape[1]} features, only using 100')
+	if feats > 0:  # reduce number of features
+		print(f'data set has {loader[0].shape[1]} features, only using {feats}')
 		for i in range(2):
-			loader[i] = loader[i][:,:100]
+			loader[i] = loader[i][:,:feats]
 	
 	train_loader = DataLoader(loader[0], batch_size=loader[0].shape[0])
 	test_loader = DataLoader(loader[1], batch_size=loader[1].shape[0])

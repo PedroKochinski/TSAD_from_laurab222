@@ -148,6 +148,7 @@ studies*/*
 preprocessing/*
 iTransformer*/*
 TranAD*/*
+None*/*
 *ATLAS_TS*/*
 *.csv
 data/*

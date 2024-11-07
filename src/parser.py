@@ -37,6 +37,11 @@ parser.add_argument('--epochs',
 					required=False,
 					default=5,
                     help="number of training epochs")
+parser.add_argument('--feats', 
+					type=int, 
+					required=False,
+					default=-1,
+                    help="number of features to be used")
 parser.add_argument('--checkpoint', 
                     required=False,
                     default=None,
@@ -53,5 +58,8 @@ parser.add_argument('--less',
 parser.add_argument('--prob', 
 					action='store_true', 
 					help="model gives back probabilistic output")
+parser.add_argument('--name', type=str, 
+					required=False, default=None,
+					help="name of the result folder")
 parser.add_argument('--f', default=None, help='dummy argument for jupyter notebooks')
 args = parser.parse_args()
