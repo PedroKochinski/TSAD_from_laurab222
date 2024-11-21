@@ -1,8 +1,5 @@
 #!/bin/bash
 
-source "/Users/lauraboggia/VSCode_projects/TranAD/.conda/activate"
-conda activate "/Users/lauraboggia/VSCode_projects/TranAD/.conda"
-
 # for (( i=10; i<100; i+=10 ))
 # do
 #     echo "Window size: $i"
@@ -48,12 +45,12 @@ conda activate "/Users/lauraboggia/VSCode_projects/TranAD/.conda"
     
 # done
 
-for n in 100 200 500 1000 2000
-do
-    s=$(($n/2))
-    echo "n_window $n step_size $s"
-    python main.py --model iTransformer --n_window $n --dataset IEEECIS_pca_scaled --step_size $s --retrain --feats 40
-done
+# for n in 100 200 500 1000 2000
+# do
+#     s=$(($n/2))
+#     echo "n_window $n step_size $s"
+#     python main.py --model iTransformer --n_window $n --dataset IEEECIS_pca_scaled --step_size $s --retrain --feats 40
+# done
 
 # for n in 5 10 20 30
 # do
@@ -61,3 +58,16 @@ done
 #     python main.py --model iTransformer --n_window $n --dataset ATLAS_TS --step_size 1 --retrain --less
 #     python main.py --model TranAD --n_window $n --dataset ATLAS_TS --step_size 1 --retrain --less
 # done
+
+# for m in LSTM_AD MAD_GAN OmniAnomaly DAGMM iTransformer TranAD
+# do
+#     echo "Model $m"
+#     python main.py --model $m --n_window 100 --dataset SMD --step_size 50 --retrain --feats -1
+# done
+
+for d in GECCO
+do
+    echo "data set $d"
+    python main.py --model iTransformer --n_window 100 --dataset $d --step_size 50 --retrain --feats -1
+done
+

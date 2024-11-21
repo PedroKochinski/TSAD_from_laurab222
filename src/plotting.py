@@ -55,17 +55,17 @@ def plotter(path, y_true, y_pred, ascore, labels, ts_length=[]):
 		ax3 = ax1.twinx()
 		ax3.plot(l, 'r', alpha=0.2)
 		ax3.fill_between(np.arange(l.shape[0]), l, color='red', alpha=0.2, label='Anomaly')
+		if ts_length != []:
+			# sum up previous entries in ts_length to get the end of each time series
+			start = 0
+			for x in np.cumsum(ts_length):
+				ax1.axvline(x=x, color='k', linestyle=':', label='End of time series')
+				start += x
 		if dim == 0: 
 			# ax1.legend(ncol=2, bbox_to_anchor=(0.63, 0.9))
 			# ax3.legend(ncol=1, bbox_to_anchor=(0.3, 1.5))
 			ax1.legend(ncol=2, bbox_to_anchor=(0.35, 1.5))
 			ax3.legend(ncol=1, bbox_to_anchor=(0.95, 1.5))
-			if ts_length != []:
-				# sum up previous entries in ts_length to get the end of each time series
-				start = 0
-				for x in np.cumsum(ts_length):
-					ax1.axvline(x=x, color='k', linestyle=':', label='End of time series')
-					start += x
 		ax2.plot(smooth(a_s))
 		ax2.set_xlabel('Timestamp')
 		ax2.set_ylabel('Anomaly Score', labelpad=20, ha='center', va='center')

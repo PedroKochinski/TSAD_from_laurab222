@@ -17,11 +17,6 @@ file_prefixes = {
 	'MSL_new': 'C-1_',
 	'UCR': '136_',
 	'NAB': 'ec2_request_latency_system_failure_',
-	'IEEECIS': '',
-	'IEEECIS_new': '',
-	'IEEECIS_pca': '',
-	'IEEECIS_pca_scaled': '',
-	'ATLAS_TS': '',
 }
 
 
@@ -30,7 +25,7 @@ def convert_to_windows(data, model): # old version
 	for i, g in enumerate(data): 
 		if i >= w_size: w = data[i-w_size:i]
 		else: w = torch.cat([data[0].repeat(w_size-i, 1), data[0:i]])
-		windows.append(w if model.name in ['TranAD', 'Attention', 'iTransformer'] else w.view(-1))
+		windows.append(w if model.name in ['TranAD', 'Attention'] else w.view(-1))
 	return torch.stack(windows)
 
 
@@ -50,7 +45,7 @@ def convert_to_windows_new(data, model, window_size=10, step_size=1, ts_lengths=
 	"""
 
 	ideal_lengths = []
-	if model.name in ['iTransformer']: 
+	if model.name in ['iTransformer'] and step_size > 1: 
 		windows = torch.tensor([])
 		if ts_lengths == [] or ts_lengths[0] == []:    # check lengths of individual time series, otherwise assume data is one time series
 			ts_lengths = [len(data)]
@@ -81,28 +76,33 @@ def load_dataset(dataset, feats=-1, less=False):
 
 	#TODO fix ATLAS_TS loader 
 	for file in ['train', 'test', 'labels']:
-		if dataset in file_prefixes:
+		if 'IEEECIS' in dataset or 'ATLAS' in dataset:
+			paths = glob.glob(os.path.join(folder, f'*{file}*.npy'))
+			paths = sorted(paths)  # sort paths to ensure correct order, otherwise labels & test files are mismatched
+			if dataset in ['ATLAS_TS'] and file == 'train' and less:
+				paths = [paths[0]]
+			elif 'IEEECIS' in dataset and file == 'train' and less:
+				paths = paths[:50]
+			loader.append(np.concatenate([np.load(p) for p in paths]))
+			ts_lengths.append([np.load(p).shape[0] for p in paths])
+		elif dataset in file_prefixes:
 			prefix = file_prefixes[dataset]
-			if dataset in ['IEEECIS_new', 'IEEECIS_pca', 'IEEECIS_pca_scaled', 'ATLAS_TS']:
-				paths = glob.glob(os.path.join(folder, f'*{file}*.npy'))
-				paths = sorted(paths)  # sort paths to ensure correct order, otherwise labels & test files are mismatched
-				if dataset in ['ATLAS_TS'] and file == 'train' and less:
-					paths = [paths[0]]
-				loader.append(np.concatenate([np.load(p) for p in paths]))
-				ts_lengths.append([np.load(p).shape[0] for p in paths])
-			else:
-				loader.append(np.load(os.path.join(folder, f'{prefix}{file}.npy')))
+			loader.append(np.load(os.path.join(folder, f'{prefix}{file}.npy')))
+			ts_lengths.append([loader[-1].shape[0]])
 		else:
 			loader.append(np.load(os.path.join(folder, f'{file}.npy')))
+			ts_lengths.append([loader[-1].shape[0]])
 
 	if dataset in ['SMD', 'IEEECIS'] and less:
-		loader[0] = cut_array(0.02, loader[0])
-		loader[1] = cut_array(0.02, loader[1])
-		loader[2] = cut_array(0.02, loader[2])
-	elif less and dataset not in ['ATLAS_TS']: 
+		loader[0] = cut_array(0.3, loader[0])
+		loader[1] = cut_array(0.1, loader[1])
+		loader[2] = cut_array(0.1, loader[2])
+		ts_lengths = [[loader[i].shape[0]] for i in range(len(loader))]  # update time series lengths 
+	elif less and 'IEEECIS' not in dataset and 'ATLAS' not in dataset:
 		loader[0] = cut_array(0.5, loader[0])
 		loader[1] = cut_array(0.3, loader[1])
 		loader[2] = cut_array(0.3, loader[2])
+		ts_lengths = [[loader[i].shape[0]] for i in range(len(loader))]  # update time series lengths 
 
 	if feats > 0:  # reduce number of features
 		print(f'data set has {loader[0].shape[1]} features, only using {feats}')
@@ -119,4 +119,6 @@ def load_dataset(dataset, feats=-1, less=False):
 	print('training set shape:', train_loader.dataset.shape)
 	print('test set shape:', test_loader.dataset.shape)
 	print('labels shape:', labels.shape)
+	print('ts_lengths 0:', np.sum(ts_lengths[0]))
+	print('ts_lengths 1:', np.sum(ts_lengths[1]))
 	return train_loader, test_loader, labels, ts_lengths

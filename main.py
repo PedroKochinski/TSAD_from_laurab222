@@ -329,7 +329,7 @@ def local_pot(loss, lossT, labels, q):
 	# get anomaly labels
 	df_res_local = pd.DataFrame()
 	preds = []
-	for i in range(feats):
+	for i in range(loss.shape[1]):
 		lt, l, ls = lossT[:, i], loss[:, i], labels[:, i]  	
 		result_local, pred = pot_eval(lt, l, ls, plot_path, f'dim{i}', q=q)
 		preds.append(pred)
@@ -422,7 +422,10 @@ if __name__ == '__main__':
 	print(f'{color.HEADER}Testing {args.model} on {args.dataset}{color.ENDC}')
 
 	### Scores
-	lossT, _ = backprop(0, model, train_test, feats, optimizer, scheduler, training=False)  # need anomaly scores on training data for POT
+	if model.name in ['Attention', 'DAGMM', 'USAD', 'MSCRED', 'CAE_M', 'GDN', 'MTAD_GAT', 'MAD_GAN', 'iTransformer'] or 'TranAD' in model.name:
+		lossT, _ = backprop(0, model, train_test, feats, optimizer, scheduler, training=False)  # need anomaly scores on training data for POT
+	else:
+		lossT, _ = backprop(0, model, trainD, feats, optimizer, scheduler, training=False)
 	loss, y_pred = backprop(0, model, testD, feats, optimizer, scheduler, training=False)
 
 	print(lossT.shape, loss.shape, labels.shape)
@@ -435,7 +438,8 @@ if __name__ == '__main__':
 			loss_tmp.append(loss[start:start+l])
 			y_pred_tmp.append(y_pred[start:start+l])
 			start += ideal_len
-
+		
+		start = 0
 		for i, l in enumerate(ts_lengths[0]):
 			ideal_len = train_ts_lengths[i]
 			lossT_tmp.append(lossT[start:start+l])

@@ -142,8 +142,14 @@ data/WADI/WADI_attackdata.csv
 .vscode/
 plots*/*
 results/*
-*_SMAP/*
+*_SMAP*/*
+*_MSL*/*
+*_SMD*/*
+*_SWaT*/*
 *_UCR/*
+*_IEEECIS*/*
+*_GECCO/*
+*_ATLAS_TS*/*
 studies*/*
 preprocessing/*
 iTransformer*/*
