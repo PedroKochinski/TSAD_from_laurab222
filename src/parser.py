@@ -58,6 +58,9 @@ parser.add_argument('--less',
 parser.add_argument('--prob', 
 					action='store_true', 
 					help="model gives back probabilistic output")
+parser.add_argument('--enc',
+					action='store_true',
+					help="use additional time encoder covariate")
 parser.add_argument('--name', type=str, 
 					required=False, default=None,
 					help="name of the result folder")

@@ -25,7 +25,7 @@ def convert_to_windows(data, model): # old version
 	for i, g in enumerate(data): 
 		if i >= w_size: w = data[i-w_size:i]
 		else: w = torch.cat([data[0].repeat(w_size-i, 1), data[0:i]])
-		windows.append(w if model.name in ['TranAD', 'Attention'] else w.view(-1))
+		windows.append(w if model.name in ['TranAD', 'Attention', 'iTransformer'] else w.view(-1))
 	return torch.stack(windows)
 
 
@@ -67,23 +67,35 @@ def convert_to_windows_new(data, model, window_size=10, step_size=1, ts_lengths=
 	return windows, ideal_lengths
 
 
-def load_dataset(dataset, feats=-1, less=False):
+def load_dataset(dataset, feats=-1, less=False, enc=False):
 	folder = os.path.join(output_folder, dataset)
 	if not os.path.exists(folder):
 		raise Exception('Processed Data not found.')
 	loader = []
 	ts_lengths = []
+	enc_feats = 0
 
-	#TODO fix ATLAS_TS loader 
 	for file in ['train', 'test', 'labels']:
 		if 'IEEECIS' in dataset or 'ATLAS' in dataset:
 			paths = glob.glob(os.path.join(folder, f'*{file}*.npy'))
 			paths = sorted(paths)  # sort paths to ensure correct order, otherwise labels & test files are mismatched
-			if dataset in ['ATLAS_TS'] and file == 'train' and less:
-				paths = [paths[0]]
-			elif 'IEEECIS' in dataset and file == 'train' and less:
-				paths = paths[:50]
+			if enc:
+				enc_paths = glob.glob(os.path.join(folder, f'*timestamp_{file[:2]}_*.npy'))
+				enc_paths = sorted(enc_paths)
+			if less and file == 'train':
+				if dataset in ['ATLAS_TS']:
+					paths = [paths[0]]
+					if enc:
+						enc_paths = [enc_paths[0]]
+				elif 'IEEECIS' in dataset:
+					paths = paths[:50]
+					if enc:
+						enc_paths = enc_paths[:50]
 			loader.append(np.concatenate([np.load(p) for p in paths]))
+			if enc and file != 'labels':
+				enc_loader = np.concatenate([np.load(p) for p in enc_paths])
+				loader[-1] = np.concatenate((enc_loader, loader[-1]), axis=1)
+				enc_feats = enc_loader.shape[1]
 			ts_lengths.append([np.load(p).shape[0] for p in paths])
 		elif dataset in file_prefixes:
 			prefix = file_prefixes[dataset]
@@ -107,7 +119,8 @@ def load_dataset(dataset, feats=-1, less=False):
 	if feats > 0:  # reduce number of features
 		print(f'data set has {loader[0].shape[1]} features, only using {feats}')
 		for i in range(2):
-			loader[i] = loader[i][:,:feats]
+			max_feats = feats + enc_feats
+			loader[i] = loader[i][:,:max_feats]
 	
 	train_loader = DataLoader(loader[0], batch_size=loader[0].shape[0])
 	test_loader = DataLoader(loader[1], batch_size=loader[1].shape[0])
@@ -121,4 +134,4 @@ def load_dataset(dataset, feats=-1, less=False):
 	print('labels shape:', labels.shape)
 	print('ts_lengths 0:', np.sum(ts_lengths[0]))
 	print('ts_lengths 1:', np.sum(ts_lengths[1]))
-	return train_loader, test_loader, labels, ts_lengths
+	return train_loader, test_loader, labels, ts_lengths, enc_feats

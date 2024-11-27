@@ -17,7 +17,7 @@ from src.merlin import *
 from src.data_loader import load_dataset, convert_to_windows_new
 
 
-def backprop(epoch, model, data, feats, optimizer, scheduler, training = True):
+def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc_feats=0, prob=False):
 	l = nn.MSELoss(reduction = 'mean' if training else 'none')
 	if 'DAGMM' in model.name:
 		l = nn.MSELoss(reduction = 'none')
@@ -206,7 +206,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training = True):
 				# if not l1s and n<=1: 
 				# 	summary(model, input_data=[window, elem])
 				z = model(window, elem)
-				if args.prob:  # sample from probabilistic output
+				if prob:  # sample from probabilistic output
 					if isinstance(z, tuple):  # if z = (x1, x2)
 						x1 = z[0]; x2 = z[1]
 						x1_mu, x1_logsigma = torch.split(x1, split_size_or_sections=feats, dim=2)
@@ -232,7 +232,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training = True):
 				window = d.permute(1, 0, 2)
 				elem = window[-1, :, :].view(1, bs, feats)
 				z = model(window, elem)
-				if args.prob:  # don't sample from probabilistic output for testing, just use mean
+				if prob:  # don't sample from probabilistic output for testing, just use mean
 					if isinstance(z, tuple):  # if z = (x1, x2)
 						x1 = z[0]; x2 = z[1]
 						x1_mu, x1_logsigma = torch.split(x1, split_size_or_sections=feats, dim=2)
@@ -255,22 +255,27 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training = True):
 			l1s = []
 			for d, _ in dataloader:
 				local_bs = d.shape[0]
+				if enc_feats>0:
+					d_enc = d[:, :, :enc_feats]
+					d = d[:, :, enc_feats:]
+				else:
+					d_enc = None
 				# don't invert d because we have permutation later in DataEmbedding_inverted as part of model
 				# elem = d.permute(1, 0, 2)[-1, :, :].view(1, local_bs, feats)  # [1, B, N]
 				elem = d.permute(1, 0, 2) # [n_window, B, N]
 				# if not l1s: 
-				# 	summary(model, input_size=[1, 10, 25])
+				# 	summary(model, input_size=[1, args.n_window, args.feats])
 				if model.output_attention:
-					z = model(d)[0]
+					z = model(d, d_enc)[0]
 				else:
-					z = model(d)
-				if args.prob:  # sample from probabilistic output
+					z = model(d, d_enc)
+				if prob:  # sample from probabilistic output
 					z_mu = z[0]
 					z_logsigma = z[1]
 					z = z_mu + torch.randn(size=z_logsigma.size())*torch.exp(z_logsigma)
 				l1 = l(z, elem)
 				l1s.append(torch.mean(l1).item())
-				if args.prob:
+				if prob:
 					z_std = torch.exp(z_logsigma)
 					loss = torch.mean(l1/z_std) + torch.mean(z_std)
 					# loss = torch.mean(l1)
@@ -289,14 +294,19 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training = True):
 			z_all = torch.empty(0)
 			for d, _ in dataloader:
 				local_bs = d.shape[0]
+				if enc_feats > 0:
+					d_enc = d[:, :, :enc_feats]
+					d = d[:, :, enc_feats:]
+				else:
+					d_enc = None
 				# don't invert d because we have permutation later in DataEmbedding_inverted
 				# elem = d.permute(1, 0, 2)[-1, :, :].view(1, local_bs, feats)
-				elem = d.permute(1, 0, 2) # [n_window, B, N]
+				elem = d.permute(1, 0, 2)  # [n_window, B, N]
 				if model.output_attention:
-					z = model(d)[0]
+					z = model(d, d_enc)[0]
 				else:
-					z = model(d)
-				if args.prob:  # don't sample from probabilistic output for testing, just use mean
+					z = model(d, d_enc)
+				if prob:  # don't sample from probabilistic output for testing, just use mean
 					z_mu = z[0]
 					z_logsigma = z[1]
 					z = z_mu
@@ -307,7 +317,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training = True):
 				z_all = torch.cat((z_all, z.permute(1, 0, 2)), dim=0)
 			loss = loss.view((data.shape[0]* data.shape[1], feats))
 			z_all = z_all.view((data.shape[0]* data.shape[1], feats))
-			# if args.prob:
+			# if prob:
 			# 	z_std = torch.exp(z_logsigma)
 			# 	loss = loss / z_std  #+ z_std
 			return loss.detach().numpy(), z_all.detach().numpy() # because we have unnecessary third dimension
@@ -361,11 +371,10 @@ if __name__ == '__main__':
 	print(args, '\n')
 
 	# define path for results, checkpoints & plots & create directories
-	if args.name is not None:
-		folder = f'{args.model}_{args.dataset}/n_window{args.n_window}_steps{args.step_size}_feats{args.feats}_eps{args.epochs}_{args.name}'
+	if args.name:
+		folder = f'{args.model}/{args.model}_{args.dataset}/n_window{args.n_window}_steps{args.step_size}_feats{args.feats}_eps{args.epochs}_{args.name}'
 	else:
-		folder = f'{args.model}_{args.dataset}/n_window{args.n_window}_steps{args.step_size}_feats{args.feats}_eps{args.epochs}'
-		# folder = f'studies2.3/{args.model}_{args.dataset}/detectionlvl_{args.q}'
+		folder = f'{args.model}/{args.model}_{args.dataset}/n_window{args.n_window}_steps{args.step_size}_feats{args.feats}_eps{args.epochs}'
 	plot_path = f'{folder}/plots'
 	res_path = f'{folder}/results'
 	if args.checkpoint is None:
@@ -375,8 +384,8 @@ if __name__ == '__main__':
 	os.makedirs(plot_path, exist_ok=True)
 	os.makedirs(res_path, exist_ok=True)
 
-	train_loader, test_loader, labels, ts_lengths = load_dataset(args.dataset, args.feats, args.less)
-	feats = train_loader.dataset.shape[1]
+	train_loader, test_loader, labels, ts_lengths, enc_feats = load_dataset(args.dataset, args.feats, args.less, args.enc)
+	feats = train_loader.dataset.shape[1] - enc_feats
 	if args.model in ['MERLIN']:
 		eval(f'run_{args.model.lower()}(test_loader, labels, args.dataset)')
 	model, optimizer, scheduler, epoch, accuracy_list = load_model(args.model, feats, checkpoints_path)
@@ -397,11 +406,16 @@ if __name__ == '__main__':
 	## Prepare data
 	trainD, testD = next(iter(train_loader)), next(iter(test_loader))
 	trainD, testD = trainD.to(torch.float64), testD.to(torch.float64)  # necessary because model in double precision, data should be as well
+	if args.enc and model.name != 'iTransformer':
+		trainD, testD = trainD[:, enc_feats:], testD[:, enc_feats:]  # remove timestamp encoding features
 	trainO, testO = trainD, testD
 	if model.name in ['Attention', 'DAGMM', 'USAD', 'MSCRED', 'CAE_M', 'GDN', 'MTAD_GAT', 'MAD_GAN', 'iTransformer'] or 'TranAD' in model.name: 
 		trainD, _ = convert_to_windows_new(trainO, model, window_size=args.n_window, step_size=args.step_size, ts_lengths=ts_lengths[0]) 				 # use windows shifted by step size for training
 		train_test, train_ts_lengths = convert_to_windows_new(trainO, model, window_size=args.n_window, step_size=args.n_window, ts_lengths=ts_lengths[0])	 # use non-overlapping windows for testing, need this for POT
 		testD, test_ts_lengths  = convert_to_windows_new(testD, model, window_size=args.n_window, step_size=args.n_window, ts_lengths=ts_lengths[1]) 		 # use non-overlapping windows for testing
+	if args.enc:  # remove timestamp encoding features
+		labels = labels[:, enc_feats:]
+		trainO, testO = trainO[:, enc_feats:], testO[:, enc_feats:]
 
 	# if model.name == 'iTransformer':
 	# 	summary(model, input_data=trainD, depth=5, verbose=1)
@@ -410,7 +424,7 @@ if __name__ == '__main__':
 		print(f'{color.HEADER}Training {args.model} on {args.dataset}{color.ENDC}')
 		num_epochs = args.epochs; e = epoch + 1; start = time()
 		for e in tqdm(list(range(epoch+1, epoch+num_epochs+1))):
-			lossT, lr = backprop(e, model, trainD, feats, optimizer, scheduler)
+			lossT, lr = backprop(e, model, trainD, feats, optimizer, scheduler, training=True, enc_feats=enc_feats, prob=args.prob)
 			accuracy_list.append((lossT, lr))
 		print(color.BOLD+'Training time: '+"{:10.4f}".format(time()-start)+' s'+color.ENDC)
 		save_model(checkpoints_path, model, optimizer, scheduler, e, accuracy_list)
@@ -423,10 +437,10 @@ if __name__ == '__main__':
 
 	### Scores
 	if model.name in ['Attention', 'DAGMM', 'USAD', 'MSCRED', 'CAE_M', 'GDN', 'MTAD_GAT', 'MAD_GAN', 'iTransformer'] or 'TranAD' in model.name:
-		lossT, _ = backprop(0, model, train_test, feats, optimizer, scheduler, training=False)  # need anomaly scores on training data for POT
+		lossT, _ = backprop(0, model, train_test, feats, optimizer, scheduler, training=False, enc_feats=enc_feats, prob=args.prob)  # need anomaly scores on training data for POT
 	else:
-		lossT, _ = backprop(0, model, trainD, feats, optimizer, scheduler, training=False)
-	loss, y_pred = backprop(0, model, testD, feats, optimizer, scheduler, training=False)
+		lossT, _ = backprop(0, model, trainD, feats, optimizer, scheduler, training=False, enc_feats=enc_feats, prob=args.prob)
+	loss, y_pred = backprop(0, model, testD, feats, optimizer, scheduler, training=False, enc_feats=enc_feats, prob=args.prob)	
 
 	print(lossT.shape, loss.shape, labels.shape)
 	if model.name == 'iTransformer':

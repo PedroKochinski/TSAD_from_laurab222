@@ -621,8 +621,8 @@ class iTransformer(nn.Module):
 	
 	def forward(self, src, src_mark_enc=None):
 		# decoder input
-		dec_inp = torch.zeros_like(src[:, -self.pred_len:, :])
-		dec_inp = torch.cat([src[:, :self.label_len, :], dec_inp], dim=1)
+		# dec_inp = torch.zeros_like(src[:, -self.pred_len:, :])
+		# dec_inp = torch.cat([src[:, :self.label_len, :], dec_inp], dim=1)
 		
 		dec_out = self.forecast(src, src_mark_enc)  # [B, 2L, N]
 		if self.prob:
