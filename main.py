@@ -247,42 +247,33 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 	elif 'iTransformer' in model.name:
 		l = nn.MSELoss(reduction = 'none')
 		data_x = torch.DoubleTensor(data)
-		dataset = TensorDataset(data_x, data_x)
-		bs = model.batch # if training else len(data)
-		dataloader = DataLoader(dataset, batch_size = bs)
+		data_y = np.concatenate((data[1:], data[:1]), axis=0)  # shift data by one time step
+		data_y = torch.DoubleTensor(data_y)
+		dataset = TensorDataset(data_x, data_y)
+		bs = model.batch
+		dataloader = DataLoader(dataset, batch_size=bs, shuffle=False)
 		n = epoch + 1
 		if training:
 			l1s = []
-			for d, _ in dataloader:
-				local_bs = d.shape[0]
+			for dx, dy  in dataloader:
+				local_bs = dx.shape[0]
 				if enc_feats>0:
-					d_enc = d[:, :, :enc_feats]
-					d = d[:, :, enc_feats:]
+					d_enc = dx[:, :, :enc_feats]
+					dx = dx[:, :, enc_feats:]
+					dy = dy[:, :, enc_feats:]
 				else:
 					d_enc = None
 				# don't invert d because we have permutation later in DataEmbedding_inverted as part of model
-				# elem = d.permute(1, 0, 2)[-1, :, :].view(1, local_bs, feats)  # [1, B, N]
-				elem = d.permute(1, 0, 2) # [n_window, B, N]
+				dy = dy.permute(1, 0, 2)[-1,:,:] # [1, B, N]
 				# if not l1s: 
 				# 	summary(model, input_size=[1, args.n_window, args.feats])
 				if model.output_attention:
-					z = model(d, d_enc)[0]
+					z = model(dx, d_enc)[0]
 				else:
-					z = model(d, d_enc)
-				if prob:  # sample from probabilistic output
-					z_mu = z[0]
-					z_logsigma = z[1]
-					z = z_mu + torch.randn(size=z_logsigma.size())*torch.exp(z_logsigma)
-				l1 = l(z, elem)
+					z = model(dx, d_enc)
+				l1 = l(z, dy)
 				l1s.append(torch.mean(l1).item())
-				if prob:
-					z_std = torch.exp(z_logsigma)
-					loss = torch.mean(l1/z_std) + torch.mean(z_std)
-					# loss = torch.mean(l1)
-					# loss_fct = torch.nn.GaussianNLLLoss(eps=1e-6, reduction='mean')
-					# loss = loss_fct(z, elem, torch.exp(2*z_logsigma))
-				else:
-					loss = torch.mean(l1)
+				loss = torch.mean(l1)
 				optimizer.zero_grad()
 				loss.backward(retain_graph=True)
 				optimizer.step()
@@ -292,34 +283,27 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 		else:
 			loss = torch.empty(0)
 			z_all = torch.empty(0)
-			for d, _ in dataloader:
-				local_bs = d.shape[0]
+			for dx, dy in dataloader:
+				local_bs = dx.shape[0]
 				if enc_feats > 0:
-					d_enc = d[:, :, :enc_feats]
-					d = d[:, :, enc_feats:]
+					d_enc = dx[:, :, :enc_feats]
+					dx = dx[:, :, enc_feats:]
+					dy = dy[:, :, enc_feats:]
 				else:
 					d_enc = None
 				# don't invert d because we have permutation later in DataEmbedding_inverted
-				# elem = d.permute(1, 0, 2)[-1, :, :].view(1, local_bs, feats)
-				elem = d.permute(1, 0, 2)  # [n_window, B, N]
+				dy = dy.permute(1, 0, 2)[-1,:,:] # [1, B, N]
 				if model.output_attention:
-					z = model(d, d_enc)[0]
+					z = model(dx, d_enc)[0]
 				else:
-					z = model(d, d_enc)
-				if prob:  # don't sample from probabilistic output for testing, just use mean
-					z_mu = z[0]
-					z_logsigma = z[1]
-					z = z_mu
-				l1 = l(z, elem)
-				# loss_fct = torch.nn.GaussianNLLLoss(eps=1e-6, reduction='none')
-				# l1 = loss_fct(z, elem, torch.exp(2*z_logsigma))
-				loss = torch.cat((loss, l1.permute(1, 0, 2)), dim=0)
-				z_all = torch.cat((z_all, z.permute(1, 0, 2)), dim=0)
-			loss = loss.view((data.shape[0]* data.shape[1], feats))
-			z_all = z_all.view((data.shape[0]* data.shape[1], feats))
-			# if prob:
-			# 	z_std = torch.exp(z_logsigma)
-			# 	loss = loss / z_std  #+ z_std
+					z = model(dx, d_enc)
+				l1 = l(z, dy)
+				loss = torch.cat((loss, l1), dim=0)
+				z_all = torch.cat((z_all, z), dim=0)
+				# loss = torch.cat((loss, l1.permute(1, 0, 2)), dim=0)
+				# z_all = torch.cat((z_all, z.permute(1, 0, 2)), dim=0)
+			# loss = loss.view((data.shape[0]* data.shape[1], feats))
+			# z_all = z_all.view((data.shape[0]* data.shape[1], feats))
 			return loss.detach().numpy(), z_all.detach().numpy() # because we have unnecessary third dimension
 	else:
 		y_pred = model(data)
@@ -410,9 +394,10 @@ if __name__ == '__main__':
 		trainD, testD = trainD[:, enc_feats:], testD[:, enc_feats:]  # remove timestamp encoding features
 	trainO, testO = trainD, testD
 	if model.name in ['Attention', 'DAGMM', 'USAD', 'MSCRED', 'CAE_M', 'GDN', 'MTAD_GAT', 'MAD_GAN', 'iTransformer'] or 'TranAD' in model.name: 
-		trainD, _ = convert_to_windows_new(trainO, model, window_size=args.n_window, step_size=args.step_size, ts_lengths=ts_lengths[0]) 				 # use windows shifted by step size for training
-		train_test, train_ts_lengths = convert_to_windows_new(trainO, model, window_size=args.n_window, step_size=args.n_window, ts_lengths=ts_lengths[0])	 # use non-overlapping windows for testing, need this for POT
-		testD, test_ts_lengths  = convert_to_windows_new(testD, model, window_size=args.n_window, step_size=args.n_window, ts_lengths=ts_lengths[1]) 		 # use non-overlapping windows for testing
+		trainD, train_ts_lengths = convert_to_windows_new(trainO, model, window_size=args.n_window, step_size=args.step_size, ts_lengths=ts_lengths[0]) 				 # use windows shifted by step size for training
+		# train_test, train_ts_lengths = convert_to_windows_new(trainO, model, window_size=args.n_window, step_size=args.n_window, ts_lengths=ts_lengths[0])	 # use non-overlapping windows for testing, need this for POT
+		train_test = trainD
+		testD, test_ts_lengths  = convert_to_windows_new(testD, model, window_size=args.n_window, step_size=args.step_size, ts_lengths=ts_lengths[1]) 		 # use non-overlapping windows for testing
 	if args.enc:  # remove timestamp encoding features
 		labels = labels[:, enc_feats:]
 		trainO, testO = trainO[:, enc_feats:], testO[:, enc_feats:]
@@ -443,26 +428,26 @@ if __name__ == '__main__':
 	loss, y_pred = backprop(0, model, testD, feats, optimizer, scheduler, training=False, enc_feats=enc_feats, prob=args.prob)	
 
 	print(lossT.shape, loss.shape, labels.shape)
-	if model.name == 'iTransformer':
-		# cut out the padding from test data, loss tensors
-		lossT_tmp, loss_tmp, y_pred_tmp = [], [], []
-		start = 0
-		for i, l in enumerate(ts_lengths[1]):
-			ideal_len = test_ts_lengths[i]
-			loss_tmp.append(loss[start:start+l])
-			y_pred_tmp.append(y_pred[start:start+l])
-			start += ideal_len
+	# if model.name == 'iTransformer':
+	# 	# cut out the padding from test data, loss tensors
+	# 	lossT_tmp, loss_tmp, y_pred_tmp = [], [], []
+	# 	start = 0
+	# 	for i, l in enumerate(ts_lengths[1]):
+	# 		ideal_len = test_ts_lengths[i]
+	# 		loss_tmp.append(loss[start:start+l])
+	# 		y_pred_tmp.append(y_pred[start:start+l])
+	# 		start += ideal_len
 		
-		start = 0
-		for i, l in enumerate(ts_lengths[0]):
-			ideal_len = train_ts_lengths[i]
-			lossT_tmp.append(lossT[start:start+l])
-			start += ideal_len
+	# 	start = 0
+	# 	for i, l in enumerate(ts_lengths[0]):
+	# 		ideal_len = train_ts_lengths[i]
+	# 		lossT_tmp.append(lossT[start:start+l])
+	# 		start += ideal_len
 
-		lossT = np.concatenate(lossT_tmp, axis=0)
-		loss = np.concatenate(loss_tmp, axis=0)
-		y_pred = np.concatenate(y_pred_tmp, axis=0)
-	print(lossT.shape, loss.shape, labels.shape)
+	# 	lossT = np.concatenate(lossT_tmp, axis=0)
+	# 	loss = np.concatenate(loss_tmp, axis=0)
+	# 	y_pred = np.concatenate(y_pred_tmp, axis=0)
+	# print(lossT.shape, loss.shape, labels.shape)
 
 	### Plot curves
 	# if not args.test:

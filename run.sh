@@ -59,15 +59,24 @@
 #     python main.py --model TranAD --n_window $n --dataset ATLAS_TS --step_size 1 --retrain --less
 # done
 
-for m in OmniAnomaly DAGMM iTransformer TranAD  #  LSTM_AD MAD_GAN
-do
-    echo "Model $m"
-    python main.py --model $m --n_window 10 --dataset GECCO --step_size 1 --retrain --feats -1
-done
+# for m in OmniAnomaly DAGMM iTransformer TranAD  #  LSTM_AD MAD_GAN
+# do
+#     echo "Model $m"
+#     python main.py --model $m --n_window 10 --dataset GECCO --step_size 1 --retrain --feats -1
+# done
 
-for d in GECCO
-do
-    echo "data set $d"
-    python main.py --model iTransformer --n_window 100 --dataset $d --step_size 50 --retrain --feats -1
-done
+# for d in GECCO IEEECIS_new2.3
+# do
+#     echo "data set $d"
+#     python main.py --model iTransformer --n_window 100 --dataset $d --step_size 50 --retrain --feats -1
+# done
+
+# python main.py --model iTransformer --n_window 100 --dataset GECCO --step_size 50 --retrain --feats -1 --name forecasting
+# python main.py --model iTransformer --n_window 100 --dataset GECCO --step_size 50 --retrain --feats -1 --enc --name enc_forecasting
+# python main.py --model iTransformer --n_window 100 --dataset IEEECIS_new2.3 --step_size 50 --retrain --feats 30 --name forecasting
+# python main.py --model iTransformer --n_window 100 --dataset IEEECIS_new2.3 --step_size 50 --retrain --feats 30 --enc --name enc_forecasting
+
+python main.py --model iTransformer --n_window 20 --dataset GECCO --step_size 1 --retrain --feats -1 --name forecasting
+python main.py --model iTransformer --n_window 10 --dataset GECCO --step_size 1 --retrain --feats -1 --epochs 10 --name forecasting2
+python main.py --model iTransformer --n_window 10 --dataset GECCO --step_size 1 --retrain --feats -1 --epochs 20 --name forecasting3
 

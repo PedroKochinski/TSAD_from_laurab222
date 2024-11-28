@@ -633,5 +633,5 @@ class iTransformer(nn.Module):
 			return dec_mu, dec_logsigma
 		else:
 			dec_out = dec_out[:, :, :]  # [B, 1, N], for AD only give back last element of window/sequence
-			out = dec_out.permute(1, 0, 2)  # [1, B, N], permute to have same output structure as other models
+			out = dec_out.permute(1, 0, 2)[-1, :, :]  # [1, B, N], permute to have same output structure as other models
 			return out
