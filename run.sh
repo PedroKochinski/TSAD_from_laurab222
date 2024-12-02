@@ -1,4 +1,5 @@
 #!/bin/bash
+source /cvmfs/sft.cern.ch/lcg/views/LCG_105_cuda/x86_64-el9-gcc11-opt/setup.sh
 
 # for (( i=10; i<100; i+=10 ))
 # do
@@ -59,15 +60,15 @@
 #     python main.py --model TranAD --n_window $n --dataset ATLAS_TS --step_size 1 --retrain --less
 # done
 
-for m in OmniAnomaly DAGMM iTransformer TranAD  #  LSTM_AD MAD_GAN
-do
-    echo "Model $m"
-    python main.py --model $m --n_window 10 --dataset GECCO --step_size 1 --retrain --feats -1
-done
+# for m in OmniAnomaly DAGMM iTransformer TranAD  #  LSTM_AD MAD_GAN
+# do
+#     echo "Model $m"
+#     python main.py --model $m --n_window 10 --dataset GECCO --step_size 1 --retrain --feats -1
+# done
 
 for d in GECCO
 do
     echo "data set $d"
-    python main.py --model iTransformer --n_window 100 --dataset $d --step_size 50 --retrain --feats -1
+    python main.py --model iTransformer --n_window 100 --dataset $d --step_size 50 --retrain --feats -1 --name test_lxplus
 done
 

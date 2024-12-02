@@ -77,16 +77,18 @@ def load_dataset(dataset, feats=-1, less=False, enc=False):
 
 	for file in ['train', 'test', 'labels']:
 		if 'IEEECIS' in dataset or 'ATLAS' in dataset:
+			if 'ATLAS' in dataset and file == 'test':
+				file = f'{file}_cosmicCalo'
 			paths = glob.glob(os.path.join(folder, f'*{file}*.npy'))
 			paths = sorted(paths)  # sort paths to ensure correct order, otherwise labels & test files are mismatched
 			if enc:
 				enc_paths = glob.glob(os.path.join(folder, f'*timestamp_{file[:2]}_*.npy'))
 				enc_paths = sorted(enc_paths)
 			if less and file == 'train':
-				if dataset in ['ATLAS_TS']:
-					paths = [paths[0]]
+				if 'ATLAS' in dataset:
+					paths = paths[:100]
 					if enc:
-						enc_paths = [enc_paths[0]]
+						enc_paths = enc_paths[:100]
 				elif 'IEEECIS' in dataset:
 					paths = paths[:50]
 					if enc:
@@ -126,6 +128,9 @@ def load_dataset(dataset, feats=-1, less=False, enc=False):
 	test_loader = DataLoader(loader[1], batch_size=loader[1].shape[0])
 	labels = loader[2]
 	
+	# if labels are one dimensional, add axis
+	if len(labels.shape) == 1:
+		labels = labels[:, np.newaxis]
 	if labels.shape[1] == 1: # if labels are 1D, repeat them for each feature to have 2D labels
 		labels = np.repeat(labels, loader[0].shape[1], axis=1)
 		

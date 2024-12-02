@@ -25,6 +25,7 @@ lm_d = {
         'IEEECIS_pca': [(0.96, 1), (0.99, 1)],
         'IEEECIS_pca_scaled': [(0.96, 1), (0.99, 1)],
         'ATLAS_TS':  [(0.9995, 1.04), (0.99995, 1.06)],
+        'ATLAS_DQM_TS':  [(0.9995, 1.04), (0.99995, 1.06)],
         'GECCO':  [(0.9995, 1.04), (0.99995, 1.06)],
         'lorenzetti':  [(0.9995, 1.04), (0.99995, 1.06)],
 	}
@@ -54,6 +55,7 @@ lr_d = {
         'IEEECIS_pca': 0.001,
         'IEEECIS_pca_scaled': 0.001,
 		'ATLAS_TS': 0.0001,
+        'ATLAS_DQM_TS': 0.0001,
         'GECCO': 0.0001,
         'lorenzetti': 0.0001,
 	}
@@ -83,6 +85,7 @@ percentiles = {
         'IEEECIS_pca': (97, 3),
         'IEEECIS_pca_scaled': (97, 3),
         'ATLAS_TS': (98, 2000),
+        'ATLAS_DQM_TS': (98, 2000),
 		'GECCO': (98, 2000),
         'lorenzetti': (98, 2000),
 	}

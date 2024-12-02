@@ -3,8 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import pickle
-import dgl
-from dgl.nn import GATConv
+# import dgl
+# from dgl.nn import GATConv
 from torch.nn import TransformerEncoder
 from torch.nn import TransformerDecoder
 from src.dlutils import *
@@ -259,70 +259,70 @@ class CAE_M(nn.Module):
 		x = self.decoder(z)
 		return x.view(-1)
 
-## MTAD_GAT Model (ICDM 20)
-class MTAD_GAT(nn.Module):
-	def __init__(self, feats):
-		super(MTAD_GAT, self).__init__()
-		self.name = 'MTAD_GAT'
-		self.lr = 0.0001
-		self.n_feats = feats
-		self.n_window = feats
-		self.n_hidden = feats * feats
-		self.g = dgl.graph((torch.tensor(list(range(1, feats+1))), torch.tensor([0]*feats)))
-		self.g = dgl.add_self_loop(self.g)
-		self.feature_gat = GATConv(feats, 1, feats)
-		self.time_gat = GATConv(feats, 1, feats)
-		self.gru = nn.GRU((feats+1)*feats*3, feats*feats, 1)
+# ## MTAD_GAT Model (ICDM 20)
+# class MTAD_GAT(nn.Module):
+# 	def __init__(self, feats):
+# 		super(MTAD_GAT, self).__init__()
+# 		self.name = 'MTAD_GAT'
+# 		self.lr = 0.0001
+# 		self.n_feats = feats
+# 		self.n_window = feats
+# 		self.n_hidden = feats * feats
+# 		self.g = dgl.graph((torch.tensor(list(range(1, feats+1))), torch.tensor([0]*feats)))
+# 		self.g = dgl.add_self_loop(self.g)
+# 		self.feature_gat = GATConv(feats, 1, feats)
+# 		self.time_gat = GATConv(feats, 1, feats)
+# 		self.gru = nn.GRU((feats+1)*feats*3, feats*feats, 1)
 
-	def forward(self, data, hidden):
-		hidden = torch.rand(1, 1, self.n_hidden, dtype=torch.float64) if hidden is not None else hidden
-		data = data.view(self.n_window, self.n_feats)
-		data_r = torch.cat((torch.zeros(1, self.n_feats), data))
-		feat_r = self.feature_gat(self.g, data_r)
-		data_t = torch.cat((torch.zeros(1, self.n_feats), data.t()))
-		time_r = self.time_gat(self.g, data_t)
-		data = torch.cat((torch.zeros(1, self.n_feats), data))
-		data = data.view(self.n_window+1, self.n_feats, 1)
-		x = torch.cat((data, feat_r, time_r), dim=2).view(1, 1, -1)
-		x, h = self.gru(x, hidden)
-		return x.view(-1), h
+# 	def forward(self, data, hidden):
+# 		hidden = torch.rand(1, 1, self.n_hidden, dtype=torch.float64) if hidden is not None else hidden
+# 		data = data.view(self.n_window, self.n_feats)
+# 		data_r = torch.cat((torch.zeros(1, self.n_feats), data))
+# 		feat_r = self.feature_gat(self.g, data_r)
+# 		data_t = torch.cat((torch.zeros(1, self.n_feats), data.t()))
+# 		time_r = self.time_gat(self.g, data_t)
+# 		data = torch.cat((torch.zeros(1, self.n_feats), data))
+# 		data = data.view(self.n_window+1, self.n_feats, 1)
+# 		x = torch.cat((data, feat_r, time_r), dim=2).view(1, 1, -1)
+# 		x, h = self.gru(x, hidden)
+# 		return x.view(-1), h
 
-## GDN Model (AAAI 21)
-class GDN(nn.Module):
-	def __init__(self, feats):
-		super(GDN, self).__init__()
-		self.name = 'GDN'
-		self.lr = 0.0001
-		self.n_feats = feats
-		self.n_window = 5
-		self.n_hidden = 16
-		self.n = self.n_window * self.n_feats
-		src_ids = np.repeat(np.array(list(range(feats))), feats)
-		dst_ids = np.array(list(range(feats))*feats)
-		self.g = dgl.graph((torch.tensor(src_ids), torch.tensor(dst_ids)))
-		self.g = dgl.add_self_loop(self.g)
-		self.feature_gat = GATConv(1, 1, feats)
-		self.attention = nn.Sequential(
-			nn.Linear(self.n, self.n_hidden), nn.LeakyReLU(True),
-			nn.Linear(self.n_hidden, self.n_hidden), nn.LeakyReLU(True),
-			nn.Linear(self.n_hidden, self.n_window), nn.Softmax(dim=0),
-		)
-		self.fcn = nn.Sequential(
-			nn.Linear(self.n_feats, self.n_hidden), nn.LeakyReLU(True),
-			nn.Linear(self.n_hidden, self.n_window), nn.Sigmoid(),
-		)
+# ## GDN Model (AAAI 21)
+# class GDN(nn.Module):
+# 	def __init__(self, feats):
+# 		super(GDN, self).__init__()
+# 		self.name = 'GDN'
+# 		self.lr = 0.0001
+# 		self.n_feats = feats
+# 		self.n_window = 5
+# 		self.n_hidden = 16
+# 		self.n = self.n_window * self.n_feats
+# 		src_ids = np.repeat(np.array(list(range(feats))), feats)
+# 		dst_ids = np.array(list(range(feats))*feats)
+# 		self.g = dgl.graph((torch.tensor(src_ids), torch.tensor(dst_ids)))
+# 		self.g = dgl.add_self_loop(self.g)
+# 		self.feature_gat = GATConv(1, 1, feats)
+# 		self.attention = nn.Sequential(
+# 			nn.Linear(self.n, self.n_hidden), nn.LeakyReLU(True),
+# 			nn.Linear(self.n_hidden, self.n_hidden), nn.LeakyReLU(True),
+# 			nn.Linear(self.n_hidden, self.n_window), nn.Softmax(dim=0),
+# 		)
+# 		self.fcn = nn.Sequential(
+# 			nn.Linear(self.n_feats, self.n_hidden), nn.LeakyReLU(True),
+# 			nn.Linear(self.n_hidden, self.n_window), nn.Sigmoid(),
+# 		)
 
-	def forward(self, data):
-		# Bahdanau style attention
-		att_score = self.attention(data).view(self.n_window, 1)
-		data = data.view(self.n_window, self.n_feats)
-		data_r = torch.matmul(data.permute(1, 0), att_score)
-		# GAT convolution on complete graph
-		feat_r = self.feature_gat(self.g, data_r)
-		feat_r = feat_r.view(self.n_feats, self.n_feats)
-		# Pass through a FCN
-		x = self.fcn(feat_r)
-		return x.view(-1)
+	# def forward(self, data):
+	# 	# Bahdanau style attention
+	# 	att_score = self.attention(data).view(self.n_window, 1)
+	# 	data = data.view(self.n_window, self.n_feats)
+	# 	data_r = torch.matmul(data.permute(1, 0), att_score)
+	# 	# GAT convolution on complete graph
+	# 	feat_r = self.feature_gat(self.g, data_r)
+	# 	feat_r = feat_r.view(self.n_feats, self.n_feats)
+	# 	# Pass through a FCN
+	# 	x = self.fcn(feat_r)
+	# 	return x.view(-1)
 
 # MAD_GAN (ICANN 19)
 class MAD_GAN(nn.Module):

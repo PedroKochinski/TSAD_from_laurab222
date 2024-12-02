@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader, TensorDataset
 import torch.nn as nn
 from time import time
 from pprint import pprint
-from torchinfo import summary
+# from torchinfo import summary
 
 from src.models import *
 from src.constants import *
