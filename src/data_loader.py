@@ -77,8 +77,11 @@ def load_dataset(dataset, feats=-1, less=False, enc=False):
 
 	for file in ['train', 'test', 'labels']:
 		if 'IEEECIS' in dataset or 'ATLAS' in dataset:
-			if 'ATLAS' in dataset and file == 'test':
-				file = f'{file}_cosmicCalo'
+			if 'ATLAS' in dataset and file != 'train':
+				# file = f'{file}_cosmicCalo'
+				# file = f'{file}_hardProbes'
+				# file = f'{file}_pumpNoise'
+				file = f'{file}_hvononNominal'
 			paths = glob.glob(os.path.join(folder, f'*{file}*.npy'))
 			paths = sorted(paths)  # sort paths to ensure correct order, otherwise labels & test files are mismatched
 			if enc:

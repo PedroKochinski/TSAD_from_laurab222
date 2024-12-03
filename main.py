@@ -469,6 +469,7 @@ if __name__ == '__main__':
 	if 'TranAD' in model.name: testO = torch.roll(testO, 1, 0) 
 	if feats <= 40:
 		plotter(plot_path, testO, y_pred, loss, labels, ts_lengths[1])
+		# plotter2(plot_path, testO, y_pred, loss, args.dataset)
 
 	# # if step_size > 1, define truth labels per window instead of per time stamp, can also just use non-overlapping windows for testing
 	# if args.step_size > 1:
@@ -519,6 +520,11 @@ if __name__ == '__main__':
 	# compare local & global anomaly labels
 	compare_labels(plot_path, pred_labels=[labelspred, labelspred_maj, labelspred_glob], true_labels=true_labels, 
 				plot_labels=['Local anomaly\n(inclusive OR)', 'Local anomaly\n(majority voting)', 'Global anomaly'], name='_all')
+	
+	if feats <= 40:
+		plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred, labels, name='_local')
+		plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred_maj, labels, name='_local_maj')
+		plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred_glob, labels, name='_global')
 
 	# saving results
 	df_res_global = pd.DataFrame.from_dict(result_global, orient='index').T

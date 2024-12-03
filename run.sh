@@ -1,5 +1,5 @@
 #!/bin/bash
-source /cvmfs/sft.cern.ch/lcg/views/LCG_105_cuda/x86_64-el9-gcc11-opt/setup.sh
+# source /cvmfs/sft.cern.ch/lcg/views/LCG_105_cuda/x86_64-el9-gcc11-opt/setup.sh
 
 # for (( i=10; i<100; i+=10 ))
 # do
@@ -66,9 +66,10 @@ source /cvmfs/sft.cern.ch/lcg/views/LCG_105_cuda/x86_64-el9-gcc11-opt/setup.sh
 #     python main.py --model $m --n_window 10 --dataset GECCO --step_size 1 --retrain --feats -1
 # done
 
-for d in GECCO
-do
-    echo "data set $d"
-    python main.py --model iTransformer --n_window 100 --dataset $d --step_size 50 --retrain --feats -1 --name test_lxplus
-done
+# for d in GECCO
+# do
+#     echo "data set $d"
+#     python main.py --model iTransformer --n_window 100 --dataset $d --step_size 50 --retrain --feats -1 --name test_lxplus
+# done
 
+python main.py --model iTransformer --n_window 2000 --dataset ATLAS_DQM_TS --retrain --step_size 1000 --feats -1 --name train_all

@@ -1,4 +1,4 @@
-name: /Users/lauraboggia/VSCode_projects/TranAD/.conda
+name: iTransformerAD
 channels:
   - conda-forge
   - intel
@@ -138,4 +138,4 @@ dependencies:
       - tzdata==2024.1
       - urllib3==2.2.2
       - xlrd==1.2.0
-prefix: /Users/lauraboggia/VSCode_projects/TranAD/.conda
+prefix: /eos/user/l/lboggia/miniforge3/iTransformerAD
