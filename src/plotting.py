@@ -15,9 +15,9 @@ plt.rcParams['lines.markersize'] = 4
 plt.rcParams['lines.linewidth'] = 2
 
 features_dict = {
-	'ATLAS_DQM_TS': ['EMBA_AveLARQ_mean', 'EMBA_AveLARQ_std', 'EMBA_ClusTime_mean', 'EMBA_ClusTime_std', 'EMBC_AveLARQ_mean', 'EMBC_AveLARQ_std',
-					 'EMBC_ClusTime_mean', 'EMBC_ClusTime_std', 'EMECA_AveLARQ_mean', 'EMECA_AveLARQ_std', 'EMECA_ClusTime_mean', 'EMECA_ClusTime_std',
-					 'EMECC_AveLARQ_mean', 'EMECC_AveLARQ_std', 'EMECC_ClusTime_mean', 'EMECC_ClusTime_std']
+	'ATLAS_DQM_TS': [r'EMBA $\hat{Q}$, mean', r'EMBA $\hat{Q}$, std', r'EMBA $\hat{\tau}$, mean', r'EMBA $\hat{\tau}$, std', r'EMBC $\hat{Q}$, mean', r'EMBC $\hat{Q}$, std',
+					 r'EMBC $\hat{\tau}$, mean',  r'EMBC $\hat{\tau}$, std', r'EMECA $\hat{Q}$, mean', r'EMECA $\hat{Q}$, std', r'EMECA $\hat{\tau}$, mean', r'EMECA $\hat{\tau}$, std',
+					 r'EMECC $\hat{Q}$, mean', r'EMECC $\hat{Q}$, std', r'EMECC $\hat{\tau}$, mean', r'EMECC $\hat{\tau}$, std']
 }
 
 
@@ -36,7 +36,7 @@ def add_atlas(ax, lines, status='Internal'):
     left_edge = ax.get_position().x0 - 0.12
     # top = 0.895
     # spacing = 0.057
-    top = 1.95 # 0.91
+    top = 2.2 #1.95 # 0.91
     spacing = 0.3
 
 	# Write text
@@ -96,7 +96,7 @@ def plotter(path, y_true, y_pred, ascore, labels, ts_length=[]):
 			# ax3.legend(ncol=1, bbox_to_anchor=(0.3, 1.5))
 			ax1.legend(ncol=2, bbox_to_anchor=(0.35, 1.55), loc='upper right',  borderaxespad=0., frameon=False)
 			ax3.legend(ncol=1, bbox_to_anchor=(0.9, 1.55), loc='upper right')
-		ax2.plot(smooth(a_s), 'g.')
+		ax2.plot(smooth(a_s), 'g-')
 		ax2.set_xlabel('Timestamp')
 		ax2.set_ylabel('Anomaly Score', labelpad=20, ha='center', va='center')
 		fig.align_ylabels([ax1, ax2])  # Align y-labels
@@ -111,40 +111,47 @@ def plotter2(path, x_true, x_pred, ascore, dataset, y_pred=None, y=None, name=''
 		features = features_dict[dataset]
 	else:
 		features = [f'Dim {i}' for i in range(x_true.shape[1])]
-	size = int(len(features)*2)  
-	dims = len(features) + 1 # because we plot ascore in the second last dimension
+	dims = len(features) + 1  # because we plot ascore in the second last dimension
 	if y is not None and y_pred is not None:
 		dims += 2
-		
+	size = int(dims * 1.1)
+
 	fig, axs = plt.subplots(dims, 1, figsize=(17, size), sharex=True)
-	# fig.text(0.95, 0.95, 'Some Text', ha='right', va='top', fontsize=12, bbox=dict(facecolor='white', alpha=0.5))
-	add_atlas(axs[0], ['Data September 2018, 'r'$\sqrt{s}= 13$''TeV', 'CosmicCalo stream'])
+	if 'ATLAS' in dataset:
+		add_atlas(axs[0], ['Data October 2023, 'r'$\sqrt{s_{NN}}= 5.36$'' TeV', 'HardProbes stream'])
 	for dim, feat in enumerate(features):  # iterate through the features we're using
 		axs[dim].plot(x_true[:, dim], label='True')
 		axs[dim].plot(x_pred[:, dim], '--', label='Predicted')
 		axs[dim].set_ylabel(feat, rotation=0, ha='right', rotation_mode='default', labelpad=5)
 		axs[dim].yaxis.set_label_coords(-0.1, 0.5)
-		# axs[dim].legend(loc='upper right')
-		axs[dim].set_ylim(-1,1)
+		if 'ATLAS' in dataset:
+			axs[dim].set_ylim(-1, 1)
 	axs[0].legend(ncol=len(features), bbox_to_anchor=(0.7, 1.02), loc='lower center', borderaxespad=0., frameon=False)
-	
-	if y is not None and y_pred is not None: # plot the target variable in last dimension if we have truth labels
-		axs[-3].plot(ascore, '.', color='tab:green')
+
+	if y is not None and y_pred is not None:  # plot the target variable in last dimension if we have truth labels
+		axs[-3].plot(ascore, '-', color='tab:green')
 		axs[-3].set_ylabel('Anomaly score', rotation=0, ha='right', rotation_mode='default', labelpad=5)
 		axs[-2].plot(y_pred, '-', color='tab:green', alpha=0.7)
 		axs[-2].set_ylabel('Predicted anomalies', rotation=0, ha='right', rotation_mode='default', labelpad=5)
 		axs[-1].plot(y, '-', color='tab:red')
 		axs[-1].set_ylabel('True anomalies', rotation=0, ha='right', rotation_mode='default', labelpad=5)
+		axs[-3].yaxis.set_label_coords(-0.1, 0.5)
 		axs[-2].yaxis.set_label_coords(-0.1, 0.5)
 		axs[-1].yaxis.set_label_coords(-0.1, 0.5)
 	else:
-		axs[-1].plot(ascore, 'g.')
+		axs[-1].plot(ascore, '-', color='tab:green')
 		axs[-1].set_ylabel('Anomaly score', rotation=0, ha='right', rotation_mode='default', labelpad=5)
 		axs[-1].yaxis.set_label_coords(-0.1, 0.5)
-		
-	axs[-1].set_xlabel('Timestamp')  
+
+	if 'ATLAS' in dataset:
+		axs[-1].set_xlabel('Events')
+	elif 'IEEECIS' in dataset:
+		axs[-1].set_xlabel('Transactions')
+	else:
+		axs[-1].set_xlabel('Timestamp')
 	plt.tight_layout()
-	plt.savefig(f'{path}/output2{name}.png', dpi=100, facecolor='white')
+	fig.subplots_adjust(hspace=0.2)  # Adjust the distance between subplots
+	fig.savefig(f'{path}/output2{name}.png', dpi=100, facecolor='white')
 	plt.close()
 
 def plot_labels(path, name, y_pred, y_true):

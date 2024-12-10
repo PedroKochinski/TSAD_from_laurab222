@@ -31,18 +31,18 @@
 
 # for (( i=1; i<5; i++ ))
 # do 
-# for f in 40  # 50 75 100 150
-# do
-#     echo "$i : # features $f"
-#     python main.py --model iTransformer --n_window 100 --dataset IEEECIS_pca_scaled --step_size 50 --feats $f --retrain --name $i
+# # for f in 40  # 50 75 100 150
+# # do
+#     echo "$i : rep"
+#     python main.py --model iTransformer --n_window 100 --dataset GECCO --step_size 50 --feats -1 --retrain --name $i
     
-# done
+# # done
 # done
 
 # for e in 10 15 20
 # do
 #     echo "# features $f"
-#     python main.py --model iTransformer --n_window 100 --dataset IEEECIS_pca_scaled --step_size 50 --feats 100 --epochs $e --retrain
+#     python main.py --model iTransformer --n_window 100 --dataset IEEECIS_pca_scaled --steps_size 50 --feats 100 --epochs $e --retrain
     
 # done
 
@@ -66,10 +66,29 @@
 #     python main.py --model $m --n_window 10 --dataset GECCO --step_size 1 --retrain --feats -1
 # done
 
-# for d in GECCO
+for d in IEEECIS_new2.2
+do
+    echo "data set $d"
+    python main.py --model iTransformer_dec --n_window 10 --dataset $d --step_size 1 --retrain --feats 30
+done
+
+for d in GECCO SWaT SMD SMAP_new MSL_new UCR ATLAS_TS
+do
+    echo "data set $d"
+    python main.py --model iTransformer_dec --n_window 10 --dataset $d --step_size 1 --retrain --feats -1
+done
+
+# for d in  # SMD SMAP_new UCR ATLAS_TS SWaT
 # do
 #     echo "data set $d"
-#     python main.py --model iTransformer --n_window 100 --dataset $d --step_size 50 --retrain --feats -1 --name test_lxplus
+#     python main.py --model USAD --n_window 10 --dataset $d --step_size 1 --retrain --feats -1 
 # done
 
-python main.py --model iTransformer --n_window 2000 --dataset ATLAS_DQM_TS --retrain --step_size 1000 --feats -1 --name train_all
+# for d in SMD SMAP_new UCR ATLAS_TS
+# do
+#     echo "data set $d"
+#     python main.py --model MERLIN --n_window 10 --dataset $d --step_size 1 --retrain --feats -1 
+# done
+
+
+# python main.py --model iTransformer --n_window 2000 --dataset ATLAS_DQM_TS --retrain --step_size 1000 --feats -1 --name train_all

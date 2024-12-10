@@ -25,7 +25,7 @@ def convert_to_windows(data, model): # old version
 	for i, g in enumerate(data): 
 		if i >= w_size: w = data[i-w_size:i]
 		else: w = torch.cat([data[0].repeat(w_size-i, 1), data[0:i]])
-		windows.append(w if model.name in ['TranAD', 'Attention', 'iTransformer'] else w.view(-1))
+		windows.append(w if model.name in ['TranAD', 'Attention', 'iTransformer', 'LSTM_AE'] else w.view(-1))
 	return torch.stack(windows)
 
 
@@ -45,7 +45,7 @@ def convert_to_windows_new(data, model, window_size=10, step_size=1, ts_lengths=
 	"""
 
 	ideal_lengths = []
-	if model.name in ['iTransformer'] and step_size > 1: 
+	if 'iTransformer' in model.name or model.name in ['LSTM_AE'] and step_size > 1: 
 		windows = torch.tensor([])
 		if ts_lengths == [] or ts_lengths[0] == []:    # check lengths of individual time series, otherwise assume data is one time series
 			ts_lengths = [len(data)]
@@ -77,11 +77,11 @@ def load_dataset(dataset, feats=-1, less=False, enc=False):
 
 	for file in ['train', 'test', 'labels']:
 		if 'IEEECIS' in dataset or 'ATLAS' in dataset:
-			if 'ATLAS' in dataset and file != 'train':
+			if 'ATLAS_DQM' in dataset and file != 'train':
 				# file = f'{file}_cosmicCalo'
 				# file = f'{file}_hardProbes'
-				# file = f'{file}_pumpNoise'
-				file = f'{file}_hvononNominal'
+				file = f'{file}_pumpNoise'
+				# file = f'{file}_hvononNominal'
 			paths = glob.glob(os.path.join(folder, f'*{file}*.npy'))
 			paths = sorted(paths)  # sort paths to ensure correct order, otherwise labels & test files are mismatched
 			if enc:
@@ -89,9 +89,9 @@ def load_dataset(dataset, feats=-1, less=False, enc=False):
 				enc_paths = sorted(enc_paths)
 			if less and file == 'train':
 				if 'ATLAS' in dataset:
-					paths = paths[:100]
+					paths = paths[:10]
 					if enc:
-						enc_paths = enc_paths[:100]
+						enc_paths = enc_paths[:10]
 				elif 'IEEECIS' in dataset:
 					paths = paths[:50]
 					if enc:

@@ -156,7 +156,9 @@ iTransformer*/*
 TranAD*/*
 MAD_GAN*/*
 OmniAnomaly*/*
-LSTM_AD*/*
+LSTM*/*
+USAD*/*
+Merlin*/*
 DAGMM*/*
 IF*/*
 None*/*

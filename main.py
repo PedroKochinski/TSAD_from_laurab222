@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader, TensorDataset
 import torch.nn as nn
 from time import time
 from pprint import pprint
-# from torchinfo import summary
+from torchinfo import summary
 
 from src.models import *
 from src.constants import *
@@ -247,13 +247,14 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 	elif 'iTransformer' in model.name:
 		l = nn.MSELoss(reduction = 'none')
 		data_x = torch.DoubleTensor(data)
-		dataset = TensorDataset(data_x, data_x)
+		dataset = TensorDataset(data_x)
 		bs = model.batch # if training else len(data)
 		dataloader = DataLoader(dataset, batch_size = bs)
 		n = epoch + 1
 		if training:
 			l1s = []
-			for d, _ in dataloader:
+			for d in dataloader:
+				d = d[0]  # d.shape is [B, n_window, N]
 				local_bs = d.shape[0]
 				if enc_feats>0:
 					d_enc = d[:, :, :enc_feats]
@@ -261,10 +262,8 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 				else:
 					d_enc = None
 				# don't invert d because we have permutation later in DataEmbedding_inverted as part of model
-				# elem = d.permute(1, 0, 2)[-1, :, :].view(1, local_bs, feats)  # [1, B, N]
-				elem = d.permute(1, 0, 2) # [n_window, B, N]
-				# if not l1s: 
-				# 	summary(model, input_size=[1, args.n_window, args.feats])
+				if epoch == 0 and l1s == []: 
+					summary(model, input_data=d, depth=5, verbose=1)
 				if model.output_attention:
 					z = model(d, d_enc)[0]
 				else:
@@ -273,7 +272,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 					z_mu = z[0]
 					z_logsigma = z[1]
 					z = z_mu + torch.randn(size=z_logsigma.size())*torch.exp(z_logsigma)
-				l1 = l(z, elem)
+				l1 = l(z, d)
 				l1s.append(torch.mean(l1).item())
 				if prob:
 					z_std = torch.exp(z_logsigma)
@@ -292,16 +291,14 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 		else:
 			loss = torch.empty(0)
 			z_all = torch.empty(0)
-			for d, _ in dataloader:
+			for d in dataloader:
+				d = d[0]  # d.shape is [B, n_window, N]
 				local_bs = d.shape[0]
 				if enc_feats > 0:
 					d_enc = d[:, :, :enc_feats]
 					d = d[:, :, enc_feats:]
 				else:
 					d_enc = None
-				# don't invert d because we have permutation later in DataEmbedding_inverted
-				# elem = d.permute(1, 0, 2)[-1, :, :].view(1, local_bs, feats)
-				elem = d.permute(1, 0, 2)  # [n_window, B, N]
 				if model.output_attention:
 					z = model(d, d_enc)[0]
 				else:
@@ -310,16 +307,48 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 					z_mu = z[0]
 					z_logsigma = z[1]
 					z = z_mu
-				l1 = l(z, elem)
+				l1 = l(z, d)
 				# loss_fct = torch.nn.GaussianNLLLoss(eps=1e-6, reduction='none')
 				# l1 = loss_fct(z, elem, torch.exp(2*z_logsigma))
-				loss = torch.cat((loss, l1.permute(1, 0, 2)), dim=0)
-				z_all = torch.cat((z_all, z.permute(1, 0, 2)), dim=0)
+				loss = torch.cat((loss, l1), dim=0)
+				z_all = torch.cat((z_all, z), dim=0)
 			loss = loss.view((data.shape[0]* data.shape[1], feats))
 			z_all = z_all.view((data.shape[0]* data.shape[1], feats))
 			# if prob:
 			# 	z_std = torch.exp(z_logsigma)
 			# 	loss = loss / z_std  #+ z_std
+			return loss.detach().numpy(), z_all.detach().numpy() # because we have unnecessary third dimension
+	elif 'LSTM_AE' in model.name:
+		data_x = torch.DoubleTensor(data)
+		dataset = TensorDataset(data_x)
+		bs = model.batch # if training else len(data)
+		dataloader = DataLoader(dataset, batch_size = bs)
+		n = epoch + 1
+		if training:
+			l1s = []
+			for d in dataloader:
+				elem = d[0]
+				y_pred = model(elem)
+				l1 = l(y_pred, elem)
+				l1s.append(torch.mean(l1).item())
+				loss = torch.mean(l1)
+				optimizer.zero_grad()
+				loss.backward(retain_graph=True)
+				optimizer.step()
+			scheduler.step()
+			tqdm.write(f'Epoch {epoch},\tL1 = {np.mean(l1s)}')
+			return np.mean(l1s), optimizer.param_groups[0]['lr']
+		else:
+			loss = torch.empty(0)
+			z_all = torch.empty(0)
+			for d in dataloader:
+				elem = d[0]
+				y_pred = model(elem)
+				l1 = l(y_pred, elem)
+				loss = torch.cat((loss, l1), dim=0)
+				z_all = torch.cat((z_all, elem), dim=0)
+			loss = loss.view((data.shape[0]* data.shape[1], feats))
+			z_all = z_all.view((data.shape[0]* data.shape[1], feats))
 			return loss.detach().numpy(), z_all.detach().numpy() # because we have unnecessary third dimension
 	else:
 		y_pred = model(data)
@@ -406,10 +435,10 @@ if __name__ == '__main__':
 	## Prepare data
 	trainD, testD = next(iter(train_loader)), next(iter(test_loader))
 	trainD, testD = trainD.to(torch.float64), testD.to(torch.float64)  # necessary because model in double precision, data should be as well
-	if args.enc and model.name != 'iTransformer':
+	if args.enc and 'iTransformer' not in model.name:  
 		trainD, testD = trainD[:, enc_feats:], testD[:, enc_feats:]  # remove timestamp encoding features
 	trainO, testO = trainD, testD
-	if model.name in ['Attention', 'DAGMM', 'USAD', 'MSCRED', 'CAE_M', 'GDN', 'MTAD_GAT', 'MAD_GAN', 'iTransformer'] or 'TranAD' in model.name: 
+	if model.name in ['Attention', 'DAGMM', 'USAD', 'MSCRED', 'CAE_M', 'GDN', 'MTAD_GAT', 'MAD_GAN', 'LSTM_AE'] or 'TranAD' in model.name or 'iTransformer' in model.name: 
 		trainD, _ = convert_to_windows_new(trainO, model, window_size=args.n_window, step_size=args.step_size, ts_lengths=ts_lengths[0]) 				 # use windows shifted by step size for training
 		train_test, train_ts_lengths = convert_to_windows_new(trainO, model, window_size=args.n_window, step_size=args.n_window, ts_lengths=ts_lengths[0])	 # use non-overlapping windows for testing, need this for POT
 		testD, test_ts_lengths  = convert_to_windows_new(testD, model, window_size=args.n_window, step_size=args.n_window, ts_lengths=ts_lengths[1]) 		 # use non-overlapping windows for testing
@@ -436,14 +465,14 @@ if __name__ == '__main__':
 	print(f'{color.HEADER}Testing {args.model} on {args.dataset}{color.ENDC}')
 
 	### Scores
-	if model.name in ['Attention', 'DAGMM', 'USAD', 'MSCRED', 'CAE_M', 'GDN', 'MTAD_GAT', 'MAD_GAN', 'iTransformer'] or 'TranAD' in model.name:
-		lossT, _ = backprop(0, model, train_test, feats, optimizer, scheduler, training=False, enc_feats=enc_feats, prob=args.prob)  # need anomaly scores on training data for POT
+	if model.name in ['Attention', 'DAGMM', 'USAD', 'MSCRED', 'CAE_M', 'GDN', 'MTAD_GAT', 'MAD_GAN', 'LSTM_AE'] or 'TranAD' in model.name or 'iTransformer' in model.name: 
+		lossT, _ = backprop(-1, model, train_test, feats, optimizer, scheduler, training=False, enc_feats=enc_feats, prob=args.prob)  # need anomaly scores on training data for POT
 	else:
-		lossT, _ = backprop(0, model, trainD, feats, optimizer, scheduler, training=False, enc_feats=enc_feats, prob=args.prob)
-	loss, y_pred = backprop(0, model, testD, feats, optimizer, scheduler, training=False, enc_feats=enc_feats, prob=args.prob)	
+		lossT, _ = backprop(-1, model, trainD, feats, optimizer, scheduler, training=False, enc_feats=enc_feats, prob=args.prob)
+	loss, y_pred = backprop(-1, model, testD, feats, optimizer, scheduler, training=False, enc_feats=enc_feats, prob=args.prob)	
 
 	print(lossT.shape, loss.shape, labels.shape)
-	if model.name == 'iTransformer':
+	if 'iTransformer' in model.name or model.name in ['LSTM_AE']:
 		# cut out the padding from test data, loss tensors
 		lossT_tmp, loss_tmp, y_pred_tmp = [], [], []
 		start = 0

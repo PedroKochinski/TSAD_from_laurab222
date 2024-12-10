@@ -9,10 +9,10 @@ from torch.nn import TransformerEncoder
 from torch.nn import TransformerDecoder
 from src.dlutils import *
 from src.constants import *
-torch.manual_seed(1)
+# torch.manual_seed(1)
 
 # new for iTransformer
-from layers.Transformer_EncDec import Encoder, EncoderLayer
+from layers.Transformer_EncDec import Encoder, EncoderLayer, Decoder, DecoderLayer
 from layers.SelfAttention_Family import FullAttention, AttentionLayer
 from layers.Embed import DataEmbedding_inverted
 
@@ -81,7 +81,48 @@ class LSTM_AD(nn.Module):
 			out = self.fcn(out.view(-1))
 			outputs.append(2 * out.view(-1))
 		return torch.stack(outputs)
+	
+## LSTM_AE Model (as done for Vilius' QT)
+class LSTM_AE(nn.Module):
+	def __init__(self, feats, n_window=None, prob=False):
+		super(LSTM_AE, self).__init__()
+		self.name = 'LSTM_AE'
+		self.lr = 0.002
+		self.batch = 100
+		self.n_feats = feats
+		self.n_hidden = 64
+		self.n_window = n_window
+		self.lstm = nn.LSTM(input_size=self.n_window, hidden_size=self.n_hidden, num_layers=1, batch_first=True)
+		self.lstm2 = nn.LSTM(input_size=self.n_hidden, hidden_size=self.n_hidden, num_layers=1, batch_first=True)
+		self.fcn = nn.Linear(self.n_hidden, self.n_feats)
 
+	def forward(self, x):	
+		x = x.permute(0, 2, 1)
+		# outputs = torch.tensor([])
+		# for g in x:
+		# 	g.unsqueeze_(0)
+		# 	out1, (h1, c1) = self.lstm(g)
+		# 	latent = h1.repeat(self.n_window, 1, 1)
+		# 	latent = latent.swapdims(0, 1)
+		# 	out2, (h2, c2) = self.lstm2(latent)
+		# 	out2 = self.fcn(out2)
+		# 	# outputs.append(out2)
+		# 	outputs = torch.cat([outputs, out2], dim=0)
+		# x.unsqueeze_(0)
+		out1, (h1, c1) = self.lstm(x)
+		latent = h1.repeat(self.n_window, 1, 1)
+		latent = latent.swapdims(0, 1)
+		out2, (h2, c2) = self.lstm2(latent)
+		out2 = self.fcn(out2)
+		outputs = out2
+		# outputs.append(out2)
+		# outputs = torch.cat([outputs, out2], dim=0)
+		# outputs = torch.stack(outputs)
+		# outputs = torch.cat(outputs)
+		# outputs = outputs.view(-1, self.n_window, self.n_feats)
+		# outputs = torch.squeeze(torch.stack(outputs))
+		return outputs
+	
 ## DAGMM Model (ICLR 18)
 class DAGMM(nn.Module):
 	def __init__(self, feats, n_window=5, prob=False):
@@ -166,7 +207,7 @@ class OmniAnomaly(nn.Module):
 
 ## USAD Model (KDD 20)
 class USAD(nn.Module):
-	def __init__(self, feats):
+	def __init__(self, feats,  n_window=None, prob=False):
 		super(USAD, self).__init__()
 		self.name = 'USAD'
 		self.lr = 0.0001
@@ -563,7 +604,6 @@ class iTransformer(nn.Module):
 		self.prob = prob 		# whether model gives back probabilistic output instead of single value
         # Embedding
 		self.enc_embedding = DataEmbedding_inverted(self.seq_len, self.d_model, self.embed, self.freq, self.dropout)
-		self.class_strategy = 'projection'
         # Encoder-only architecture
 		self.encoder = Encoder(
             [
@@ -632,6 +672,124 @@ class iTransformer(nn.Module):
 			dec_logsigma = dec_logsigma[:, -1:, :].permute(1, 0, 2)  # [1, B, N], for AD only give back last element of window/sequence
 			return dec_mu, dec_logsigma
 		else:
-			dec_out = dec_out[:, :, :]  # [B, 1, N], for AD only give back last element of window/sequence
-			out = dec_out.permute(1, 0, 2)  # [1, B, N], permute to have same output structure as other models
+			# dec_out = dec_out[:, :, :]  # [B, 1, N], for AD only give back last element of window/sequence
+			# out = dec_out.permute(1, 0, 2)  # [1, B, N], permute to have same output structure as other models
+			out = dec_out
 			return out
+
+# iTransformer with encoder + decoder structure
+class iTransformer_dec(nn.Module):
+	def __init__(self, feats, n_window, prob=False):
+		super(iTransformer_dec, self).__init__()
+		self.name = 'iTransformer_dec'
+		self.lr = lr
+		self.batch = 48 # if n_window > 1280 else int(1280 / n_window) # 128 for window size 10
+		self.n_feats = feats
+		self.n_window = n_window
+		self.n = self.n_feats * self.n_window
+		self.seq_len = self.n_window
+		self.label_len = self.n_window
+		self.pred_len = self.n_window
+		self.output_attention = False
+		self.use_norm = True
+		self.d_model =  2 * feats  # 512
+		self.embed = 'TimeF'
+		self.freq = 's'
+		self.dropout = 0.1
+		self.n_heads = feats  # was done like this for other algos
+		self.e_layers = 1  # encoder layers
+		self.d_layers = 1  # decoder layers
+		self.d_ff = 128 # 128 # 16
+		self.latent = self.d_model  # dimension of latent space, must be at least feats+1
+		self.factor = 1  # attention factor
+		self.activation = 'gelu'
+		self.prob = prob 		# whether model gives back probabilistic output instead of single value
+        # Embedding
+		self.enc_embedding = DataEmbedding_inverted(self.seq_len, self.d_model, self.embed, self.freq, self.dropout)
+        # Encoder+decoder architecture
+		self.encoder = Encoder(
+            [
+                EncoderLayer(
+                    AttentionLayer(
+                        FullAttention(False, self.factor, attention_dropout=self.dropout,
+                                      output_attention=self.output_attention), self.d_model, self.n_heads),
+                    self.d_model,
+                    self.d_ff,
+                    dropout=self.dropout,
+                    activation=self.activation
+                ) for l in range(self.e_layers)
+            ],
+            norm_layer=torch.nn.LayerNorm(self.d_model)
+        )
+		
+		self.projector = nn.Linear(self.d_model, self.latent, bias=True)
+		self.dec_embedding = DataEmbedding_inverted(self.seq_len, self.latent, self.embed, self.freq, self.dropout)
+	
+		self.decoder = Decoder(
+		[
+			DecoderLayer(
+				AttentionLayer(
+					FullAttention(True, self.factor, attention_dropout=self.dropout,
+									output_attention=False),
+					self.latent, self.n_heads),
+				AttentionLayer(
+					FullAttention(False, self.factor, attention_dropout=self.dropout,
+									output_attention=False),
+					self.latent, self.n_heads),
+				self.latent,
+				self.d_ff,
+				dropout=self.dropout,
+				activation=self.activation,
+			)
+			for l in range(self.d_layers)
+		],
+		norm_layer=torch.nn.LayerNorm(self.latent),
+		projection = nn.Linear(self.latent, self.pred_len, bias=True)
+		)
+		# else:
+		# 	decoder_layers = TransformerDecoderLayer(d_model=self.d_model, nhead=self.n_feats, dim_feedforward=self.d_ff, dropout=0.1)
+		# 	self.decoder= TransformerDecoder(decoder_layers, 1)
+		
+
+	def forecast(self, x_enc, x_mark_enc=None):
+		if self.use_norm:
+			# Normalization from Non-stationary Transformer
+			means = x_enc.mean(1, keepdim=True).detach()
+			x_enc = x_enc - means
+			stdev = torch.sqrt(torch.var(x_enc, dim=1, keepdim=True, unbiased=False) + 1e-5)
+			x_enc /= stdev
+
+		_, _, N = x_enc.shape # B L N
+        # B: batch_size;    E: d_model; 
+        # L: seq_len;       S: pred_len;
+        # N: number of variate (tokens), can also includes covariates
+
+        # Embedding
+        # B L N -> B N E                (B L N -> B L E in the vanilla Transformer)
+		enc_out = self.enc_embedding(x_enc, x_mark_enc) # covariates (e.g timestamp) can be also embedded as tokens
+		# B L N -> B N E/latent 
+		dec_out = self.dec_embedding(x_enc, x_mark_enc)
+        
+        # B N E -> B N E                (B L E -> B L E in the vanilla Transformer)
+        # the dimensions of embedded time series has been inverted, and then processed by native attn, layernorm and ffn modules
+		enc_out, attns = self.encoder(enc_out, attn_mask=None)
+		# B N E -> B N E/latent
+		enc_out = self.projector(enc_out)
+		 
+		# B N E/latent, B N E/latent -> B N E -> B N S
+		dec_out = self.decoder(dec_out, enc_out)
+
+        # B N S -> B S N
+		dec_out = dec_out.permute(0, 2, 1)[:, :, :N] # filter the covariates
+
+		if self.use_norm:
+			# De-Normalization from Non-stationary Transformer
+			dec_out = dec_out * (stdev[:, 0, :].unsqueeze(1).repeat(1, self.pred_len, 1))
+			dec_out = dec_out + (means[:, 0, :].unsqueeze(1).repeat(1, self.pred_len, 1))
+
+		return dec_out
+	
+	def forward(self, src, src_mark_enc=None):
+
+		dec_out = self.forecast(src, src_mark_enc)  # [B, L, N]
+		return dec_out
