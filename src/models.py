@@ -592,7 +592,7 @@ class iTransformer(nn.Module):
 		self.pred_len = self.n_window
 		self.output_attention = False
 		self.use_norm = True
-		self.d_model =  2 * feats  # 512
+		self.d_model = int(self.n_window / 2) # * feats  # 512
 		self.embed = 'TimeF'
 		self.freq = 's'
 		self.dropout = 0.1
@@ -610,7 +610,8 @@ class iTransformer(nn.Module):
                 EncoderLayer(
                     AttentionLayer(
                         FullAttention(False, self.factor, attention_dropout=self.dropout,
-                                      output_attention=self.output_attention), self.d_model, self.n_heads),
+                                      output_attention=self.output_attention), 
+									  self.d_model, self.n_heads, d_keys=self.d_model, d_values=self.d_model),
                     self.d_model,
                     self.d_ff,
                     dropout=self.dropout,
@@ -692,15 +693,15 @@ class iTransformer_dec(nn.Module):
 		self.pred_len = self.n_window
 		self.output_attention = False
 		self.use_norm = True
-		self.d_model =  2 * feats  # 512
+		self.d_model = 2 # 512
 		self.embed = 'TimeF'
 		self.freq = 's'
 		self.dropout = 0.1
-		self.n_heads = feats  # was done like this for other algos
+		self.n_heads = 5  # was done like this for other algos
 		self.e_layers = 1  # encoder layers
 		self.d_layers = 1  # decoder layers
 		self.d_ff = 128 # 128 # 16
-		self.latent = self.d_model  # dimension of latent space, must be at least feats+1
+		self.latent = self.d_model  # dimension of latent space
 		self.factor = 1  # attention factor
 		self.activation = 'gelu'
 		self.prob = prob 		# whether model gives back probabilistic output instead of single value
@@ -712,7 +713,8 @@ class iTransformer_dec(nn.Module):
                 EncoderLayer(
                     AttentionLayer(
                         FullAttention(False, self.factor, attention_dropout=self.dropout,
-                                      output_attention=self.output_attention), self.d_model, self.n_heads),
+                                      output_attention=self.output_attention), 
+									  self.d_model, self.n_heads, d_keys=self.d_model, d_values=self.d_model),
                     self.d_model,
                     self.d_ff,
                     dropout=self.dropout,
@@ -728,14 +730,15 @@ class iTransformer_dec(nn.Module):
 		self.decoder = Decoder(
 		[
 			DecoderLayer(
-				AttentionLayer(
+				AttentionLayer(  # self-attention
 					FullAttention(True, self.factor, attention_dropout=self.dropout,
 									output_attention=False),
-					self.latent, self.n_heads),
-				AttentionLayer(
-					FullAttention(False, self.factor, attention_dropout=self.dropout,
-									output_attention=False),
-					self.latent, self.n_heads),
+					self.latent, self.n_heads, d_keys=self.latent, d_values=self.latent),
+				None,  # cross-attention
+				# AttentionLayer(  # cross-attention
+				# 	FullAttention(False, self.factor, attention_dropout=self.dropout,
+				# 					output_attention=False),
+				# 	self.latent, self.n_heads, d_keys=self.latent, d_values=self.latent),
 				self.latent,
 				self.d_ff,
 				dropout=self.dropout,
@@ -777,7 +780,7 @@ class iTransformer_dec(nn.Module):
 		enc_out = self.projector(enc_out)
 		 
 		# B N E/latent, B N E/latent -> B N E -> B N S
-		dec_out = self.decoder(dec_out, enc_out)
+		dec_out = self.decoder(enc_out, None)
 
         # B N S -> B S N
 		dec_out = dec_out.permute(0, 2, 1)[:, :, :N] # filter the covariates

@@ -66,16 +66,25 @@
 #     python main.py --model $m --n_window 10 --dataset GECCO --step_size 1 --retrain --feats -1
 # done
 
-for d in IEEECIS_new2.2
-do
-    echo "data set $d"
-    python main.py --model iTransformer_dec --n_window 10 --dataset $d --step_size 1 --retrain --feats 30
-done
 
-for d in GECCO SWaT SMD SMAP_new MSL_new UCR ATLAS_TS
+for i in {1..5}
 do
-    echo "data set $d"
-    python main.py --model iTransformer_dec --n_window 10 --dataset $d --step_size 1 --retrain --feats -1
+    echo "rep $i"
+    for d in IEEECIS_new2.2
+    do
+        echo "data set $d"
+        # python main.py --model TranAD --n_window 10 --dataset $d --step_size 1 --test --feats 30 --name $i
+        python main.py --model iTransformer --n_window 10 --dataset $d --step_size 1 --test --feats 30 --name latent5_$i
+        python main.py --model iTransformer --n_window 100 --dataset $d --step_size 50 --test --feats 30 --name latent50_$i
+    done
+
+    for d in GECCO SWaT SMD SMAP_new MSL_new UCR ATLAS_TS
+    do
+        echo "data set $d"
+        # python main.py --model TranAD --n_window 10 --dataset $d --step_size 1 --test --feats -1 --name $i
+        python main.py --model iTransformer --n_window 10 --dataset $d --step_size 1 --test --feats -1 --name latent5_$i
+        python main.py --model iTransformer --n_window 100 --dataset $d --step_size 50 --test --feats -1 --name latent50_$i
+    done
 done
 
 # for d in  # SMD SMAP_new UCR ATLAS_TS SWaT
@@ -89,6 +98,5 @@ done
 #     echo "data set $d"
 #     python main.py --model MERLIN --n_window 10 --dataset $d --step_size 1 --retrain --feats -1 
 # done
-
 
 # python main.py --model iTransformer --n_window 2000 --dataset ATLAS_DQM_TS --retrain --step_size 1000 --feats -1 --name train_all

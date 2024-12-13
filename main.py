@@ -492,6 +492,8 @@ if __name__ == '__main__':
 		loss = np.concatenate(loss_tmp, axis=0)
 		y_pred = np.concatenate(y_pred_tmp, axis=0)
 	print(lossT.shape, loss.shape, labels.shape)
+	train_loss = np.mean(lossT)
+	test_loss = np.mean(loss)
 
 	### Plot curves
 	# if not args.test:
@@ -540,6 +542,7 @@ if __name__ == '__main__':
 	result_global.update(hit_att(loss, labels))
 	result_global.update(ndcg(loss, labels))
 	result_global.update({'detection level q': args.q})
+	result_global.update({'train loss': train_loss, 'test loss': test_loss})
 	print('\nglobal results') 
 	pprint(result_global)
 
