@@ -1,0 +1,32 @@
+import argparse
+from typing import Optional
+
+def parse_arguments() -> argparse.Namespace:
+	parser = argparse.ArgumentParser(description='Time-Series Anomaly Detection')
+	
+	# Dataset and model arguments
+	parser.add_argument('--dataset', metavar='-d', type=str, required=False, default='SMAP_new', help="dataset from ['synthetic', 'SMD']")
+	parser.add_argument('--model', metavar='-m', type=str, required=False, default='iTransformer', help="model name")
+	
+	# Training parameters
+	parser.add_argument('--n_window', metavar='-w', type=int, required=False, default=10, help="number of timestamps in a window")
+	parser.add_argument('--step_size', metavar='-s', type=int, required=False, default=1, help="step size for sliding window")
+	parser.add_argument('--q', metavar='-q', type=float, required=False, default=1e-5, help="detection level (risk) for POT method")
+	parser.add_argument('--epochs', metavar='-e', type=int, required=False, default=5, help="number of training epochs")
+	parser.add_argument('--feats', type=int, required=False, default=-1, help="number of features to be used")
+	parser.add_argument('--checkpoint', type=Optional[str], required=False, default=None, help="path to pretrained model checkpoint")
+	
+	# Boolean flags
+	parser.add_argument('--test', action='store_true', help="test the model")
+	parser.add_argument('--retrain', action='store_true', help="retrain the model")
+	parser.add_argument('--less', action='store_true', help="train using less data")
+	parser.add_argument('--prob', action='store_true', help="model gives back probabilistic output")
+	parser.add_argument('--weighted', action='store_true', help="use weighted loss over time stamps in a window")
+	parser.add_argument('--enc', action='store_true', help="use additional time encoder covariate")
+	
+	# Miscellaneous
+	parser.add_argument('--name', type=str, required=False, default=None, help="name of the result folder")
+	parser.add_argument('--f', default=None, help='dummy argument for jupyter notebooks')
+	
+	return parser.parse_args()
+

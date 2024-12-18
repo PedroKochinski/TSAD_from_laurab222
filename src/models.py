@@ -579,13 +579,18 @@ class TranAD(nn.Module):
 		return x1_out, x2
 
 class iTransformer(nn.Module):
-	def __init__(self, feats, n_window, prob=False):
+	def __init__(self, feats, n_window, step_size=None, prob=False, weighted_window=False):
 		super(iTransformer, self).__init__()
 		self.name = 'iTransformer'
+		self.weighted = weighted_window
 		self.lr = lr
 		self.batch = 48 # if n_window > 1280 else int(1280 / n_window) # 128 for window size 10
 		self.n_feats = feats
 		self.n_window = n_window
+		if step_size is not None:
+			self.test_step_size = step_size
+		else:
+			self.test_step_size = n_window
 		self.n = self.n_feats * self.n_window
 		self.seq_len = self.n_window
 		self.label_len = self.n_window

@@ -14,7 +14,7 @@ from src.pot import *
 from src.utils import load_model, save_model
 from src.diagnosis import *
 from src.merlin import *
-from src.data_loader import load_dataset, convert_to_windows_new
+from src.data_loader_old import load_dataset, convert_to_windows_new
 
 
 def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc_feats=0, prob=False):
@@ -203,8 +203,11 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 				local_bs = d.shape[0]
 				window = d.permute(1, 0, 2)
 				elem = window[-1, :, :].view(1, local_bs, feats)
-				# if not l1s and n<=1: 
-				# 	summary(model, input_data=[window, elem])
+				if not l1s and n<=1: 
+					summary(model, input_data=[window, elem])
+					with open(f'{folder}/config.txt', 'a') as f:
+						f.write('\nModel Summary:\n')
+						f.write(str(summary(model, input_data=[window, elem], depth=5, verbose=0)))
 				z = model(window, elem)
 				if prob:  # sample from probabilistic output
 					if isinstance(z, tuple):  # if z = (x1, x2)
@@ -251,6 +254,12 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 		bs = model.batch # if training else len(data)
 		dataloader = DataLoader(dataset, batch_size = bs)
 		n = epoch + 1
+		if model.weighted:
+			mid = model.n_window % 2
+			middle = math.floor(model.n_window / 2)
+			weights = [i + 1 for i in range(middle)] + mid * [middle+1] + [i for i in range(middle, 0, -1)]
+			weights /= np.sum(weights)
+			weights = torch.tensor(weights).view(-1,1).double()
 		if training:
 			l1s = []
 			for d in dataloader:
@@ -273,6 +282,8 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 					z_logsigma = z[1]
 					z = z_mu + torch.randn(size=z_logsigma.size())*torch.exp(z_logsigma)
 				l1 = l(z, d)
+				# if model.weighted:
+				# 	l1 = l1 * weights
 				l1s.append(torch.mean(l1).item())
 				if prob:
 					z_std = torch.exp(z_logsigma)
@@ -289,9 +300,18 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 			tqdm.write(f'Epoch {epoch},\tL1 = {np.mean(l1s)}')
 			return np.mean(l1s), optimizer.param_groups[0]['lr']
 		else:
-			loss = torch.empty(0)
-			z_all = torch.empty(0)
-			for d in dataloader:
+			if model.weighted:
+				loss = torch.zeros(size=(data.shape[0]* data.shape[1], feats))
+				z_all = torch.zeros(size=(data.shape[0]* data.shape[1], feats))
+				# mid = model.n_window % 2
+				# middle = math.floor(model.n_window / 2)
+				# weights = [i + 1 for i in range(middle)] + mid * [middle+1] + [i for i in range(middle, 0, -1)]
+				# # weights /= np.sum(weights)
+				# weights = torch.tensor(weights).view(-1,1).double()
+			else:
+				loss = torch.empty(0)
+				z_all = torch.empty(0)
+			for i, d in enumerate(dataloader):
 				d = d[0]  # d.shape is [B, n_window, N]
 				local_bs = d.shape[0]
 				if enc_feats > 0:
@@ -307,11 +327,22 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 					z_mu = z[0]
 					z_logsigma = z[1]
 					z = z_mu
-				l1 = l(z, d)
+				l1 = l(z, d)				
 				# loss_fct = torch.nn.GaussianNLLLoss(eps=1e-6, reduction='none')
 				# l1 = loss_fct(z, elem, torch.exp(2*z_logsigma))
-				loss = torch.cat((loss, l1), dim=0)
-				z_all = torch.cat((z_all, z), dim=0)
+				if model.weighted:
+					l1_weighted = l1 * weights 
+					z_weighted = z * weights
+					idx = i * local_bs * model.test_step_size
+					for j in range(local_bs):
+						start = idx +  j*model.test_step_size
+						stop = start + model.n_window	
+						loss[start:stop] += l1_weighted[j]
+						z_all[start:stop] += z_weighted[j]
+					# print(start, stop, idx)
+				else:
+					loss = torch.cat((loss, l1), dim=0)
+					z_all = torch.cat((z_all, z), dim=0)
 			loss = loss.view((data.shape[0]* data.shape[1], feats))
 			z_all = z_all.view((data.shape[0]* data.shape[1], feats))
 			# if prob:
@@ -417,20 +448,13 @@ if __name__ == '__main__':
 	feats = train_loader.dataset.shape[1] - enc_feats
 	if args.model in ['MERLIN']:
 		eval(f'run_{args.model.lower()}(test_loader, labels, args.dataset)')
-	model, optimizer, scheduler, epoch, accuracy_list = load_model(args.model, feats, checkpoints_path)
+	model, optimizer, scheduler, epoch, accuracy_list = load_model(args.model, feats, args.n_window, args.step_size, checkpoints_path, args.prob, args.weighted)
 
 	# Calculate and print the number of parameters
 	total_params = sum(p.numel() for p in model.parameters())
 	trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 	print(f'total params: {total_params}, trainable params: {trainable_params}')
-
-	# save arguments and additional info in config file
-	with open(f'{folder}/config.txt', 'w') as f:
-		f.write(f'{args.model} on {args.dataset}\n \n')
-		f.write(str(args)+'\n')
-		f.write(f'total params: {total_params}, trainable params: {trainable_params}\n')
-		f.write(f'feats: {feats}, \nts_lengths: {ts_lengths}\n')
-		f.write(f'optimizer: {optimizer}, \nscheduler: {scheduler}\n')
+		
 
 	## Prepare data
 	trainD, testD = next(iter(train_loader)), next(iter(test_loader))
@@ -440,14 +464,25 @@ if __name__ == '__main__':
 	trainO, testO = trainD, testD
 	if model.name in ['Attention', 'DAGMM', 'USAD', 'MSCRED', 'CAE_M', 'GDN', 'MTAD_GAT', 'MAD_GAN', 'LSTM_AE'] or 'TranAD' in model.name or 'iTransformer' in model.name: 
 		trainD, _ = convert_to_windows_new(trainO, model, window_size=args.n_window, step_size=args.step_size, ts_lengths=ts_lengths[0]) 				 # use windows shifted by step size for training
-		train_test, train_ts_lengths = convert_to_windows_new(trainO, model, window_size=args.n_window, step_size=args.n_window, ts_lengths=ts_lengths[0])	 # use non-overlapping windows for testing, need this for POT
-		testD, test_ts_lengths  = convert_to_windows_new(testD, model, window_size=args.n_window, step_size=args.n_window, ts_lengths=ts_lengths[1]) 		 # use non-overlapping windows for testing
+		train_test, train_ts_lengths = convert_to_windows_new(trainO, model, window_size=args.n_window, step_size=args.step_size, ts_lengths=ts_lengths[0])	 # use non-overlapping windows for testing, need this for POT
+		testD, test_ts_lengths  = convert_to_windows_new(testD, model, window_size=args.n_window, step_size=args.step_size, ts_lengths=ts_lengths[1]) 		 # use non-overlapping windows for testing
 	if args.enc:  # remove timestamp encoding features
 		labels = labels[:, enc_feats:]
 		trainO, testO = trainO[:, enc_feats:], testO[:, enc_feats:]
 
-	# if model.name == 'iTransformer':
-	# 	summary(model, input_data=trainD, depth=5, verbose=1)
+	# save arguments and additional info in config file
+	with open(f'{folder}/config.txt', 'w') as f:
+		f.write(f'{args.model} on {args.dataset}\n \n')
+		f.write(str(args)+'\n')
+		f.write(f'total params: {total_params}, trainable params: {trainable_params}\n')
+		f.write(f'feats: {feats}, \nts_lengths: {ts_lengths}\n')
+		f.write(f'optimizer: {optimizer}, \nscheduler: {scheduler}\n')
+
+		if model.name != 'TranAD':
+			summary(model, input_data=trainD[:model.batch], depth=5, verbose=1)
+			f.write('\nModel Summary:\n')
+			f.write(str(summary(model, input_data=trainD[:model.batch], depth=5, verbose=0)))
+		
 	### Training phase
 	if not args.test:
 		print(f'{color.HEADER}Training {args.model} on {args.dataset}{color.ENDC}')

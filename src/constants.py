@@ -1,6 +1,7 @@
-from src.parser import *
+from src.parse_args import parse_arguments
 from src.folderconstants import *
 
+args = parse_arguments()
 # Threshold parameters
 lm_d = {
 		'SMD': [(0.99995, 1.04), (0.99995, 1.06)],
