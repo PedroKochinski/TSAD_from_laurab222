@@ -584,7 +584,7 @@ class iTransformer(nn.Module):
 		self.name = 'iTransformer'
 		self.weighted = weighted_window
 		self.lr = lr
-		self.batch = 48 # if n_window > 1280 else int(1280 / n_window) # 128 for window size 10
+		self.batch = 5 if n_window > 1000 else int(1280 / n_window) # 128 for window size 10
 		self.n_feats = feats
 		self.n_window = n_window
 		if step_size is not None:
@@ -597,7 +597,7 @@ class iTransformer(nn.Module):
 		self.pred_len = self.n_window
 		self.output_attention = False
 		self.use_norm = True
-		self.d_model = int(self.n_window / 2) # * feats  # 512
+		self.d_model = 2  # int(self.n_window / 2) # * feats  # 512
 		self.embed = 'TimeF'
 		self.freq = 's'
 		self.dropout = 0.1

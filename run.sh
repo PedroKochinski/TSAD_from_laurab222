@@ -67,25 +67,29 @@
 # done
 
 
-for i in {1..5}
+for i in 1 # {1..5}
 do
-    # echo "rep $i"
-    # for d in IEEECIS_new2.2
-    # do
-    #     echo "data set $d"
-    #     # python main.py --model TranAD --n_window 10 --dataset $d --step_size 1 --test --feats 30 --name $i
-    #     python main.py --model iTransformer --n_window 10 --dataset $d --step_size 1 --retrain --feats 30 --name latent5_weighted_$i
-    #     python main.py --model iTransformer --n_window 100 --dataset $d --step_size 50 --retrain --feats 30 --name latent50_weighted_$i
-    # done
-
-    for d in ATLAS_TS SMD # GECCO SWaT SMD SMAP_new MSL_new UCR ATLAS_TS
-    do
-        echo "data set $d"
-        # python main.py --model TranAD --n_window 10 --dataset $d --step_size 1 --test --feats -1 --name $i
-        python main.py --model iTransformer --n_window 10 --dataset $d --step_size 1 --test --feats -1 --name latent5_weighted_$i
-        # python main.py --model iTransformer --n_window 100 --dataset $d --step_size 50 --retrain --feats -1 --name latent50_weighted_$i
-    done
+    # k=$((i-1))
+    # echo "$k"
+    echo "rep $i"
+    echo "data set $d"
+    # python main.py --model TranAD --n_window 10 --dataset IEEECIS_new2.2. --step_size 1 --epochs 20 --retrain --feats 30 --k $k --name $i
+    python main.py --model iTransformer --n_window 10 --dataset IEEECIS_new2.2 --step_size 1 --epochs 20 --retrain --feats 30 --k $i --name latent2_$i
+    python main.py --model iTransformer --n_window 100 --dataset IEEECIS_new2.2 --step_size 50 --epochs 20 --retrain --feats 30 --k $i --name latent2_$i
 done
+
+# for d in GECCO UCR # SMD SMAP_new MSL_new ATLAS_TS SWaT
+# do
+#     for i in 1 # {1..5}
+#         echo "data set $d"
+#         python main.py --model iTransformer --n_window 10 --dataset $d --step_size 1 --test --feats -1 --name latent5_weighted_1 --epochs 5 --weighted --checkpoint iTransformer/iTransformer_$d/n_window10_steps1_feats-1_eps5_latent5_weighted_1/checkpoints
+#         python main.py --model iTransformer --n_window 100 --dataset $d --step_size 50 --test --feats -1 --name latent50_weighted_1 --epochs 5 --weighted --checkpoint iTransformer/iTransformer_$d/n_window100_steps50_feats-1_eps5_latent50_weighted_1/checkpoints
+        
+#         # python main.py --model TranAD --n_window 10 --dataset $d --step_size 1 --epochs 20 --retrain --feats -1 --name $i
+#         # python main.py --model iTransformer --n_window 10 --dataset $d --step_size 1 --epochs 20 --retrain --feats -1 --name latent5_$i
+#         # python main.py --model iTransformer --n_window 100 --dataset $d --step_size 50 --epochs 20 --retrain --feats -1 --name latent50_$i
+#     done
+# done
 
 # for d in  # SMD SMAP_new UCR ATLAS_TS SWaT
 # do

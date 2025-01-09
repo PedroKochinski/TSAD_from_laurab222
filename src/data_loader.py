@@ -6,6 +6,16 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 
 
+file_prefixes = {
+	'SMD': 'machine-1-1_',
+	'SMAP': 'P-1_',
+	'SMAP_new': 'P-1_',
+	'MSL': 'C-1_',
+	'MSL_new': 'C-1_',
+	'UCR': '136_',
+	'NAB': 'ec2_request_latency_system_failure_',
+}
+
 class MyDataset(Dataset):
     def __init__(self, dataset, window_size, step_size, modelname, flag='train', feats=-1, less=False, enc=False, k=-1):
         """
@@ -36,13 +46,12 @@ class MyDataset(Dataset):
         self.flag = flag
         self.less = less
         assert k < 5
-        self.k = k
+        self.k = k if flag in ['train', 'valid'] else -1
 
         self.__load_data__(type=flag)
-        self.feats = self.data.shape[1] if feats == 0 else feats
-
+        self.feats = self.data.shape[1] if feats <= 0 else feats
+        self.complete_data = self.data
         if self.window_size > 0:
-            self.complete_data = self.data
             self.__make_windows__(self.data)
 
     def __load_data__(self, type='train'):
@@ -51,6 +60,11 @@ class MyDataset(Dataset):
             raise Exception('Processed Data not found.')
 
         file = 'train' if type == 'valid' else type
+        labelfile = 'labels'
+
+        if self.less and self.data_name in file_prefixes.keys():
+                file = file_prefixes[self.data_name] + file
+                labelfile = file_prefixes[self.data_name] + labelfile
 
         paths = glob.glob(os.path.join(folder, f'*{file}*.npy'))
         paths = sorted(paths)  # sort paths to ensure correct order, otherwise labels & test files are mismatched
@@ -64,14 +78,13 @@ class MyDataset(Dataset):
         ts_lengths = [np.load(p).shape[0] for p in paths]
 
         if type == 'test':
-            l_paths = glob.glob(os.path.join(folder, f'*labels*.npy'))
+            l_paths = glob.glob(os.path.join(folder, f'*{labelfile}*.npy'))
             labels = np.concatenate([np.load(p) for p in l_paths])
-            print(labels.shape, labels[0].shape)
 
         if self.feats > 0:
             data = data[:, :self.feats]
 
-        if self.less:
+        if self.less and self.data_name not in file_prefixes.keys():
             data = data[:10000]
             ts_lengths = [data.shape[0]]
             if type == 'test':  
@@ -117,17 +130,18 @@ class MyDataset(Dataset):
                 # separate the individual time series before slicing it into windows to avoid overlap
                 ts = data[start:start+l]  
                 if ideal_len > l: # pad with last element to have a multiple of window_size
-                    ts = np.concatenate((ts, ts[-1].repeat(ideal_len - l, 1)), axis=0)  
+                    ts = np.concatenate((ts, ts[-1:].repeat(ideal_len - l, 0)), axis=0)  
                 new_window = np.stack([ts[i*self.step_size:i*self.step_size+self.window_size] for i in range(nb_windows)])
                 windows = np.concatenate((windows, new_window), axis=0)
                 start += l
             self.data = windows
             self.ideal_lengths = ideal_lengths
         else:  # alternative version where first few windows repeat the first element, then always have 1 new element per window
-            windows = []; 
+            windows = []
+            self.ideal_lengths = self.ts_lengths
             for i, g in enumerate(data): 
                 if i >= self.window_size: w = data[i-self.window_size:i]
-                else: w = np.concatenate([data[0].repeat(self.window_size-i, 1), data[0:i]])
+                else: w = np.concatenate([data[:1].repeat(self.window_size-i, 0), data[0:i]])
                 windows.append(w if self.modelname in ['TranAD', 'Attention', 'iTransformer', 'LSTM_AE'] else w.view(-1))
             windows = np.stack(windows)
             self.data = windows
@@ -138,6 +152,9 @@ class MyDataset(Dataset):
     def __getitem__(self, idx):
         sample = self.data[idx]
         return sample
+    
+    def get_ts_lengths(self):
+        return self.ts_lengths
     
     def get_ideal_lengths(self):
         return self.ideal_lengths
@@ -152,6 +169,10 @@ class MyDataset(Dataset):
     def get_complete_data(self):
         # for plots or if we want to use unsliced data
         return self.complete_data
+    
+    def get_complete_data_wpadding(self):
+        # for plots or if we want to use unsliced data with padding
+        return self.data.reshape(-1, self.feats)
 
 
 if __name__ == '__main__':

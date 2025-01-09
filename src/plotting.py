@@ -48,7 +48,7 @@ def add_atlas(ax, lines, status='Internal'):
 def plot_accuracies(accuracy_list, folder):
 	os.makedirs(folder, exist_ok=True)
 	trainAcc = [i[0] for i in accuracy_list]
-	lrs = [i[1] for i in accuracy_list]
+	lrs = [i[-1] for i in accuracy_list]
 	plt.xticks(range(len(trainAcc)))
 	plt.xlabel('Epochs')
 	plt.ylabel('Average Training Loss', ha='center')
@@ -65,18 +65,37 @@ def plot_accuracies(accuracy_list, folder):
 	plt.savefig(f'{folder}/training-graph.pdf')
 	plt.clf()
 
+def plot_losses(accuracy_list, folder):
+	os.makedirs(folder, exist_ok=True)
+	lossT = [i[0] for i in accuracy_list]
+	lossV = [i[1] for i in accuracy_list]
+	epochs = range(1, len(lossT)+1)
+
+	plt.plot(epochs, lossT, label='Average Training Loss', marker='o')
+	plt.plot(epochs, lossV, label='Average Validation Loss', marker='o')
+	plt.xticks(epochs)
+	plt.xlabel('Epochs')
+	plt.ylabel('Average Loss')
+	plt.ylim(bottom=0)
+	# plt.yscale('log')
+
+	plt.legend()
+	plt.tight_layout()
+	plt.savefig(f'{folder}/losses.pdf')
+	plt.clf()
+
 def smooth(y, box_pts=1):
     box = np.ones(box_pts)/box_pts
     y_smooth = np.convolve(y, box, mode='same')
     return y_smooth
 
-def plotter(path, y_true, y_pred, ascore, labels, ts_length=[]):
+def plotter(path, y_true, y_pred, ascore, labels, ts_length=[], name='output'):
 	os.makedirs(path, exist_ok=True)
-	if 'TranAD' in path: y_true = torch.roll(y_true, 1, 0)
-	pdf = PdfPages(f'{path}/output.pdf')
+	# if 'TranAD' in path: y_true = torch.roll(y_true, 1, 0)
+	pdf = PdfPages(f'{path}/{name}.pdf')
 	for dim in range(y_true.shape[1]):
 		y_t, y_p, l, a_s = y_true[:, dim], y_pred[:, dim], labels[:, dim], ascore[:, dim]
-		fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(12, 6))
+		fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(12, 6), constrained_layout=True)
 		ax1.set_ylabel('Value', labelpad=20, ha='center', va='center')
 		ax1.set_title(f'Dimension = {dim}')
 		ax1.plot(smooth(y_t), label='True')
@@ -89,18 +108,23 @@ def plotter(path, y_true, y_pred, ascore, labels, ts_length=[]):
 			# sum up previous entries in ts_length to get the end of each time series
 			start = 0
 			for x in np.cumsum(ts_length):
-				ax1.axvline(x=x, color='k', linestyle=':', label='End of time series')
+				if start == 0:
+					ax1.axvline(x=x, color='k', linestyle=':', label='End of time series')
+				else:
+					ax1.axvline(x=x+start, color='k', linestyle=':')
 				start += x
 		if dim == 0: 
-			# ax1.legend(ncol=2, bbox_to_anchor=(0.63, 0.9))
-			# ax3.legend(ncol=1, bbox_to_anchor=(0.3, 1.5))
-			ax1.legend(ncol=2, bbox_to_anchor=(0.35, 1.55), loc='upper right',  borderaxespad=0., frameon=False)
-			ax3.legend(ncol=1, bbox_to_anchor=(0.9, 1.55), loc='upper right')
+			if ts_length != [] and len(ts_length) > 1:
+				ax1.legend(ncol=2, bbox_to_anchor=(0.57, 1.55), loc='upper right',  borderaxespad=0., frameon=False)
+				ax3.legend(ncol=1, bbox_to_anchor=(0.95, 1.4), loc='upper right',  borderaxespad=0., frameon=False)
+			else:
+				ax1.legend(ncol=2, bbox_to_anchor=(0.35, 1.25), loc='upper right',  borderaxespad=0., frameon=False)
+				ax3.legend(ncol=1, bbox_to_anchor=(0.95, 1.25), loc='upper right', borderaxespad=0., frameon=False)
 		ax2.plot(smooth(a_s), 'g-')
 		ax2.set_xlabel('Timestamp')
 		ax2.set_ylabel('Anomaly Score', labelpad=20, ha='center', va='center')
 		fig.align_ylabels([ax1, ax2])  # Align y-labels
-		plt.tight_layout()
+		# plt.tight_layout()
 		pdf.savefig(fig)
 		plt.close()
 	pdf.close()
@@ -114,9 +138,9 @@ def plotter2(path, x_true, x_pred, ascore, dataset, y_pred=None, y=None, name=''
 	dims = len(features) + 1  # because we plot ascore in the second last dimension
 	if y is not None and y_pred is not None:
 		dims += 2
-	size = int(dims * 1.1)
+	size = int(dims * 1.3)
 
-	fig, axs = plt.subplots(dims, 1, figsize=(17, size), sharex=True)
+	fig, axs = plt.subplots(dims, 1, figsize=(17, size), sharex=True, constrained_layout=True)
 	if 'ATLAS' in dataset:
 		add_atlas(axs[0], ['Data October 2023, 'r'$\sqrt{s_{NN}}= 5.36$'' TeV', 'HardProbes stream'])
 	for dim, feat in enumerate(features):  # iterate through the features we're using
@@ -126,7 +150,7 @@ def plotter2(path, x_true, x_pred, ascore, dataset, y_pred=None, y=None, name=''
 		axs[dim].yaxis.set_label_coords(-0.1, 0.5)
 		if 'ATLAS' in dataset:
 			axs[dim].set_ylim(-1, 1)
-	axs[0].legend(ncol=len(features), bbox_to_anchor=(0.7, 1.02), loc='lower center', borderaxespad=0., frameon=False)
+	axs[0].legend(ncol=2, bbox_to_anchor=(0.8, 1.02), loc='lower center', borderaxespad=0., frameon=False)
 
 	if y is not None and y_pred is not None:  # plot the target variable in last dimension if we have truth labels
 		axs[-3].plot(ascore, '-', color='tab:green')
@@ -149,9 +173,7 @@ def plotter2(path, x_true, x_pred, ascore, dataset, y_pred=None, y=None, name=''
 		axs[-1].set_xlabel('Transactions')
 	else:
 		axs[-1].set_xlabel('Timestamp')
-	plt.tight_layout()
-	fig.subplots_adjust(hspace=0.2)  # Adjust the distance between subplots
-	fig.savefig(f'{path}/output2{name}.png', dpi=100, facecolor='white')
+	fig.savefig(f'{path}/output2{name}.png', dpi=300, facecolor='white')
 	plt.close()
 
 def plot_labels(path, name, y_pred, y_true):
