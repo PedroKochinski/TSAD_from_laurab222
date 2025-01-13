@@ -20,9 +20,9 @@ def cut_array(percentage, arr):
 	window = round(arr.shape[0] * percentage * 0.5)
 	return arr[mid - window : mid + window, :]
 
-def save_model(folder, model, optimizer, scheduler, epoch, accuracy_list):
+def save_model(folder, model, optimizer, scheduler, epoch, accuracy_list, name=''):
 	os.makedirs(folder, exist_ok=True)
-	file_path = f'{folder}/model.ckpt'
+	file_path = f'{folder}/model{name}.ckpt'
 	torch.save({
         'epoch': epoch,
         'model_state_dict': model.state_dict(),

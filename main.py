@@ -355,13 +355,13 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 					l1s = l1.mean(dim=0)
 					loss += l1s
 				else:
-					loss = torch.cat((loss, l1.reshape(-1, feats)), dim=0)
+					loss = torch.cat((loss, l1), dim=0)
+					# loss = torch.cat((loss, l1.reshape(-1, feats)), dim=0)
 				if pred:
-					z_all = torch.cat((z_all, z.reshape(-1, feats)), dim=0)
+					z_all = torch.cat((z_all, z), dim=0)
+					# z_all = torch.cat((z_all, z.reshape(-1, feats)), dim=0)
 			if not model.weighted:
-				loss = loss.view(-1, feats) 
-			# loss = loss.view((data.shape[0]* data.shape[1], feats))
-			# z_all = z_all.view((data.shape[0]* data.shape[1], feats))
+				loss = loss.view(-1, feats)
 			# if prob:
 			# 	z_std = torch.exp(z_logsigma)
 			# 	loss = loss / z_std  #+ z_std
@@ -466,7 +466,6 @@ if __name__ == '__main__':
 	os.makedirs(plot_path, exist_ok=True)
 	os.makedirs(res_path, exist_ok=True)
 
-	# train_loader, test_loader, labels, ts_lengths, enc_feats = load_dataset(args.dataset, args.feats, args.less, args.enc)
 	train = MyDataset(args.dataset, args.n_window, args.step_size, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=args.k)
 	if args.weighted:
 		test = MyDataset(args.dataset, args.n_window, args.step_size, args.model, flag='test', feats=args.feats, less=args.less, enc=args.enc, k=-1)
@@ -482,12 +481,12 @@ if __name__ == '__main__':
 	
 	if args.k > 0:
 		valid = MyDataset(args.dataset, args.n_window, args.step_size, args.model, flag='valid', feats=args.feats, less=args.less, enc=args.enc, k=args.k)
-		ts_lengths = [train.get_ts_lengths(), valid.get_ts_lengths(), test.get_ts_lengths()]
-		ideal_lengths = [train.get_ideal_lengths(), valid.get_ideal_lengths(), test.get_ideal_lengths()]
+		# ts_lengths = [train.get_ts_lengths(), valid.get_ts_lengths(), test.get_ts_lengths()]
+		# ideal_lengths = [train.get_ideal_lengths(), valid.get_ideal_lengths(), test.get_ideal_lengths()]
 		print(f'{args.k}-fold valid set', valid.__len__(), valid.data.shape)
-	else:
-		ts_lengths = [train.get_ts_lengths(), test.get_ts_lengths()]
-		ideal_lengths = [train.get_ideal_lengths(), test.get_ideal_lengths()]
+	# else:
+		# ts_lengths = [train.get_ts_lengths(), test.get_ts_lengths()]
+		# ideal_lengths = [train.get_ideal_lengths(), test.get_ideal_lengths()]
 
 	feats = train.feats
 	enc_feats = 0  # TODO fix
@@ -533,13 +532,17 @@ if __name__ == '__main__':
 	if not args.test:
 		print(f'{color.HEADER}Training {args.model} on {args.dataset}{color.ENDC}')
 		if args.k > 0:
-			early_stopper = EarlyStopper(patience=5, min_delta=0.001)
+			early_stopper = EarlyStopper(patience=5, min_delta=0.0)
+			min_lossV = 100
 		num_epochs = args.epochs; e = epoch + 1; start_time = time()
 		for e in tqdm(list(range(epoch+1, epoch+num_epochs+1))):
 			lossT, lr = backprop(e, model, data_loader_train, feats, optimizer, scheduler, training=True, enc_feats=enc_feats, prob=args.prob)
 			if args.k > 0:
 				lossV = backprop(e, model, data_loader_valid, feats, optimizer, scheduler, training=False, enc_feats=enc_feats, prob=args.prob)
 				lossV = np.mean(lossV)
+				if lossV < min_lossV:
+					min_lossV = lossV
+					save_model(checkpoints_path, model, optimizer, scheduler, e, accuracy_list, '_best')
 			else:
 				lossV = 0
 			tqdm.write(f'Epoch {e},\tL_train = {lossT}, \t\tL_valid = {lossV}, \tLR = {lr}')
@@ -548,10 +551,11 @@ if __name__ == '__main__':
 				print(f'{color.HEADER}Early stopping at epoch {e}{color.ENDC}')
 				break
 		train_time = time() - start_time
-		print(color.BOLD+'Training time: '+"{:10.4f}".format(train_time)+' s'+color.ENDC)
-		save_model(checkpoints_path, model, optimizer, scheduler, e, accuracy_list)
+		print(f'{color.BOLD}Training time: {"{:10.4f}".format(train_time)} s or {"{:.2f}".format(train_time/60)} min {color.ENDC}')
+		save_model(checkpoints_path, model, optimizer, scheduler, e, accuracy_list, '_final')
 		plot_accuracies(accuracy_list, plot_path)
 		plot_losses(accuracy_list, plot_path)
+		np.save(f'{res_path}/accuracy_list.npy', accuracy_list)
 
 	### Testing phase
 	torch.zero_grad = True
@@ -611,6 +615,8 @@ if __name__ == '__main__':
 	if 'iTransformer' in model.name or model.name in ['LSTM_AE']:
 		# cut out the padding from test data, loss tensors
 		lossT_tmp, loss_tmp, y_pred_tmp = [], [], []
+		print(test.get_ts_lengths(), np.sum(test.get_ts_lengths()), len(test.get_ts_lengths()))
+		print(test.get_ideal_lengths(), np.sum(test.get_ideal_lengths()), len(test.get_ideal_lengths()))
 		start = 0
 		for i, l in enumerate(test.get_ts_lengths()):
 			loss_tmp.append(loss[start:start+l])
@@ -630,15 +636,10 @@ if __name__ == '__main__':
 	test_loss = np.mean(loss)
 
 	### Plot curves
-	# if not args.test:
-	# if 'TranAD' in model.name: testO = torch.roll(testO, 1, 0) 
 	if feats <= 30:
 		testO = test.get_complete_data()
 		print(len(testO), len(y_pred), len(labels))
 		plotter(plot_path, testO, y_pred, loss, labels, test.get_ts_lengths(), name='output')
-		loss2 = np.square(testO-y_pred)
-		plotter(plot_path, testO, y_pred, loss2, labels, test.get_ts_lengths(), name='output2')
-		# plotter2(plot_path, testO, y_pred, loss, args.dataset)
 
 	# # if step_size > 1, define truth labels per window instead of per time stamp, can also just use non-overlapping windows for testing
 	# if args.step_size > 1:
@@ -680,9 +681,9 @@ if __name__ == '__main__':
 	result_global.update(hit_att(loss, labels))
 	result_global.update(ndcg(loss, labels))
 	if not args.test:
-		result_global.update({'train time': train_time})
-	result_global.update({'detection level q': args.q})
-	result_global.update({'train loss': train_loss, 'test loss': test_loss})
+		result_global.update({'train_time': train_time})
+	result_global.update({'detection_level_q': args.q})
+	result_global.update({'train_loss': train_loss, 'test_loss': test_loss})
 	print('\nglobal results') 
 	pprint(result_global)
 

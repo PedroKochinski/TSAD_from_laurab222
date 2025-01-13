@@ -17,7 +17,8 @@ plt.rcParams['lines.linewidth'] = 2
 features_dict = {
 	'ATLAS_DQM_TS': [r'EMBA $\hat{Q}$, mean', r'EMBA $\hat{Q}$, std', r'EMBA $\hat{\tau}$, mean', r'EMBA $\hat{\tau}$, std', r'EMBC $\hat{Q}$, mean', r'EMBC $\hat{Q}$, std',
 					 r'EMBC $\hat{\tau}$, mean',  r'EMBC $\hat{\tau}$, std', r'EMECA $\hat{Q}$, mean', r'EMECA $\hat{Q}$, std', r'EMECA $\hat{\tau}$, mean', r'EMECA $\hat{\tau}$, std',
-					 r'EMECC $\hat{Q}$, mean', r'EMECC $\hat{Q}$, std', r'EMECC $\hat{\tau}$, mean', r'EMECC $\hat{\tau}$, std']
+					 r'EMECC $\hat{Q}$, mean', r'EMECC $\hat{Q}$, std', r'EMECC $\hat{\tau}$, mean', r'EMECC $\hat{\tau}$, std'],
+	'GECCO': 		['Tp', 'Cl', 'pH', 'Redox', 'Leit', 'Trueb', 'Cl_2', 'Fm', 'Fm_2'],
 }
 
 
@@ -73,7 +74,7 @@ def plot_losses(accuracy_list, folder):
 
 	plt.plot(epochs, lossT, label='Average Training Loss', marker='o')
 	plt.plot(epochs, lossV, label='Average Validation Loss', marker='o')
-	plt.xticks(epochs)
+	# plt.xticks(epochs)
 	plt.xlabel('Epochs')
 	plt.ylabel('Average Loss')
 	plt.ylim(bottom=0)
@@ -106,13 +107,11 @@ def plotter(path, y_true, y_pred, ascore, labels, ts_length=[], name='output'):
 		ax3.fill_between(np.arange(l.shape[0]), l, color='red', alpha=0.2, label='Anomaly')
 		if ts_length != [] and len(ts_length) > 1:
 			# sum up previous entries in ts_length to get the end of each time series
-			start = 0
 			for x in np.cumsum(ts_length):
-				if start == 0:
+				if x >= len(y_p):
 					ax1.axvline(x=x, color='k', linestyle=':', label='End of time series')
 				else:
-					ax1.axvline(x=x+start, color='k', linestyle=':')
-				start += x
+					ax1.axvline(x=x, color='k', linestyle=':')
 		if dim == 0: 
 			if ts_length != [] and len(ts_length) > 1:
 				ax1.legend(ncol=2, bbox_to_anchor=(0.57, 1.55), loc='upper right',  borderaxespad=0., frameon=False)
@@ -142,7 +141,10 @@ def plotter2(path, x_true, x_pred, ascore, dataset, y_pred=None, y=None, name=''
 
 	fig, axs = plt.subplots(dims, 1, figsize=(17, size), sharex=True, constrained_layout=True)
 	if 'ATLAS' in dataset:
-		add_atlas(axs[0], ['Data October 2023, 'r'$\sqrt{s_{NN}}= 5.36$'' TeV', 'HardProbes stream'])
+		# add_atlas(axs[0], ['Data September 2018, 'r'$\sqrt{s_{NN}}= 13$'' TeV', 'CosmicCalo stream'])  
+		# add_atlas(axs[0], ['Data October 2023, 'r'$\sqrt{s_{NN}}= 5.36$'' TeV', 'HardProbes stream'])  
+		# add_atlas(axs[0], ['Data August 2022, 'r'$\sqrt{s_{NN}}= 13.6$'' TeV', 'Main stream'])  # hvononNominal
+		add_atlas(axs[0], ['Data May 2023, 'r'$\sqrt{s_{NN}}= 13.6$'' TeV', 'Main stream'])  # pumpNoise
 	for dim, feat in enumerate(features):  # iterate through the features we're using
 		axs[dim].plot(x_true[:, dim], label='True')
 		axs[dim].plot(x_pred[:, dim], '--', label='Predicted')

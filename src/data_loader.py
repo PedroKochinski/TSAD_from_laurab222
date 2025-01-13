@@ -45,10 +45,13 @@ class MyDataset(Dataset):
         
         self.flag = flag
         self.less = less
-        assert k < 5
-        self.k = k if flag in ['train', 'valid'] else -1
+        assert k <= 5
+        self.k = k - 1 if flag in ['train', 'valid'] else -1  # k is 0-indexed for correct data selection
 
-        self.__load_data__(type=flag)
+        if self.data_name in ['ATLAS_DQM_TS']:
+            self.__load_ATLAS_DQM_TS_data__(type=flag)
+        else:
+            self.__load_data__(type=flag)
         self.feats = self.data.shape[1] if feats <= 0 else feats
         self.complete_data = self.data
         if self.window_size > 0:
@@ -68,8 +71,10 @@ class MyDataset(Dataset):
 
         paths = glob.glob(os.path.join(folder, f'*{file}*.npy'))
         paths = sorted(paths)  # sort paths to ensure correct order, otherwise labels & test files are mismatched
-        if self.k > 0 and len(paths) > 1:
-            n = len(paths) // 5
+        if self.k >= 0 and len(paths) > 1:
+            if self.k >= len(paths):
+                self.k = 0
+            n = max(len(paths) // 5, 1)
             if type == 'train':
                 paths = paths[:self.k*n] + paths[(self.k+1)*n:]
             elif type == 'valid':
@@ -91,7 +96,7 @@ class MyDataset(Dataset):
                 labels = labels[:10000]
 
         # 5-fold cross validation
-        if self.k > 0 and len(paths) == 1:
+        if self.k >= 0 and len(paths) == 1:
             n = data.shape[0] // 5
             if type == 'train':
                 data = np.concatenate([data[:self.k*n], data[(self.k+1)*n:]])
@@ -103,7 +108,42 @@ class MyDataset(Dataset):
         self.data = data
         self.ts_lengths = ts_lengths
         if type == 'test':
+            if labels.ndim == 1:
+                labels = labels[:, np.newaxis]
             self.labels = labels
+
+    def __load_ATLAS_DQM_TS_data__(self, type='train'):
+        folder = os.path.join('processed', self.data_name)
+        if not os.path.exists(folder):
+            raise Exception('Processed Data not found.')
+
+        file = 'train' if type == 'valid' else type
+        labelfile = 'labels'
+
+        if type == 'test':
+            # 'ATLAS_DQM_TS': 'cosmicCalo_',  # 'hardProbes_', 'hvononNominal_', 'pumpNoise_'
+            run = 'pumpNoise_'
+            file = run + file
+            labelfile = run + labelfile
+
+        paths = glob.glob(os.path.join(folder, f'*{file}*.npy'))
+        paths = sorted(paths)  # sort paths to ensure correct order, otherwise labels & test files are mismatched
+        if self.less and type == 'train':
+            paths = paths[:5]
+        data = np.concatenate([np.load(p) for p in paths])
+        ts_lengths = [np.load(p).shape[0] for p in paths]
+
+        if type == 'test':
+            l_paths = glob.glob(os.path.join(folder, f'*{labelfile}*.npy'))
+            labels = np.concatenate([np.load(p) for p in l_paths])
+
+        self.data = data
+        self.ts_lengths = ts_lengths
+        if type == 'test':
+            if labels.ndim == 1:
+                labels = labels[:, np.newaxis]
+            self.labels = labels
+
 
     def __make_windows__(self, data):
         """
