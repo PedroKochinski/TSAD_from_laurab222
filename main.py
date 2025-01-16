@@ -284,7 +284,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 			l1s = []
 			for d in data: # d.shape is [B, n_window, N]
 				local_bs = d.shape[0]
-				if enc_feats>0:
+				if enc_feats > 0:
 					d_enc = d[:, :, :enc_feats]
 					d = d[:, :, enc_feats:]
 				else:
@@ -481,15 +481,10 @@ if __name__ == '__main__':
 	
 	if args.k > 0:
 		valid = MyDataset(args.dataset, args.n_window, args.step_size, args.model, flag='valid', feats=args.feats, less=args.less, enc=args.enc, k=args.k)
-		# ts_lengths = [train.get_ts_lengths(), valid.get_ts_lengths(), test.get_ts_lengths()]
-		# ideal_lengths = [train.get_ideal_lengths(), valid.get_ideal_lengths(), test.get_ideal_lengths()]
 		print(f'{args.k}-fold valid set', valid.__len__(), valid.data.shape)
-	# else:
-		# ts_lengths = [train.get_ts_lengths(), test.get_ts_lengths()]
-		# ideal_lengths = [train.get_ideal_lengths(), test.get_ideal_lengths()]
 
 	feats = train.feats
-	enc_feats = 0  # TODO fix
+	enc_feats = train.enc_feats
 	
 	if args.model in ['MERLIN']:
 		eval(f'run_{args.model.lower()}(test_loader, labels, args.dataset)')
@@ -501,11 +496,11 @@ if __name__ == '__main__':
 	print(f'total params: {total_params}, trainable params: {trainable_params}')
 
 	# Create data loader
-	data_loader_train = DataLoader(train, batch_size=model.batch, shuffle=False)
+	data_loader_train = DataLoader(train, batch_size=model.batch, shuffle=True)
 	data_loader_test = DataLoader(test, batch_size=model.batch, shuffle=False)
-	data_loader_train_test = DataLoader(train_test, batch_size=model.batch, shuffle=False)
+	data_loader_train_test = DataLoader(train_test, batch_size=model.batch, shuffle=True)
 	if args.k > 0:
-		data_loader_valid = DataLoader(valid, batch_size=model.batch, shuffle=False)
+		data_loader_valid = DataLoader(valid, batch_size=model.batch, shuffle=True)
 
 	# save arguments and additional info in config file
 	with open(f'{folder}/config.txt', 'w') as f:
@@ -555,7 +550,7 @@ if __name__ == '__main__':
 		save_model(checkpoints_path, model, optimizer, scheduler, e, accuracy_list, '_final')
 		plot_accuracies(accuracy_list, plot_path)
 		plot_losses(accuracy_list, plot_path)
-		np.save(f'{res_path}/accuracy_list.npy', accuracy_list)
+		np.save(f'{checkpoints_path}/accuracy_list.npy', accuracy_list)
 
 	### Testing phase
 	torch.zero_grad = True
@@ -636,7 +631,7 @@ if __name__ == '__main__':
 	test_loss = np.mean(loss)
 
 	### Plot curves
-	if feats <= 30:
+	if feats <= 40:
 		testO = test.get_complete_data()
 		print(len(testO), len(y_pred), len(labels))
 		plotter(plot_path, testO, y_pred, loss, labels, test.get_ts_lengths(), name='output')

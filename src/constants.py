@@ -29,6 +29,8 @@ lm_d = {
         'ATLAS_DQM_TS':  [(0.9995, 1.04), (0.99995, 1.06)],
         'GECCO':  [(0.9995, 1.04), (0.99995, 1.06)],
         'lorenzetti':  [(0.9995, 1.04), (0.99995, 1.06)],
+        'creditcard': [(0.9995, 1.04), (0.99995, 1.06)],
+        'creditcard_time': [(0.9995, 1.04), (0.99995, 1.06)],
 	}
 lm = lm_d[args.dataset][1 if 'TranAD' in args.model else 0]
 
@@ -59,6 +61,8 @@ lr_d = {
         'ATLAS_DQM_TS': 0.0001,
         'GECCO': 0.0001,
         'lorenzetti': 0.0001,
+        'creditcard': 0.0001,
+        'creditcard_time': 0.0001,
 	}
 lr = lr_d[args.dataset]
 
@@ -89,6 +93,8 @@ percentiles = {
         'ATLAS_DQM_TS': (98, 2000),
 		'GECCO': (98, 2000),
         'lorenzetti': (98, 2000),
+        'creditcard': (99, 2000),
+        'creditcard_time': (99, 2000),
 	}
 percentile_merlin = percentiles[args.dataset][0]
 cvp = percentiles[args.dataset][1]

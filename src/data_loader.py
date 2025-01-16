@@ -42,6 +42,7 @@ class MyDataset(Dataset):
         self.step_size = step_size
         self.feats = feats
         self.enc = enc
+        self.enc_feats = self.__get_enc_feats__()
         
         self.flag = flag
         self.less = less
@@ -52,7 +53,9 @@ class MyDataset(Dataset):
             self.__load_ATLAS_DQM_TS_data__(type=flag)
         else:
             self.__load_data__(type=flag)
-        self.feats = self.data.shape[1] if feats <= 0 else feats
+        # self.feats = self.data.shape[1] if feats <= 0 else feats
+        # if self.enc:
+        #     self.feats -= self.enc_feats
         self.complete_data = self.data
         if self.window_size > 0:
             self.__make_windows__(self.data)
@@ -87,13 +90,19 @@ class MyDataset(Dataset):
             labels = np.concatenate([np.load(p) for p in l_paths])
 
         if self.feats > 0:
-            data = data[:, :self.feats]
+            if self.enc:
+                max_feats = self.feats + self.enc_feats
+            else:
+                max_feats = self.feats
+            data = data[:, :max_feats]
+        else:
+            self.feats = data.shape[1] - self.enc_feats
 
         if self.less and self.data_name not in file_prefixes.keys():
-            data = data[:10000]
+            data = data[:50000]
             ts_lengths = [data.shape[0]]
             if type == 'test':  
-                labels = labels[:10000]
+                labels = labels[:50000]
 
         # 5-fold cross validation
         if self.k >= 0 and len(paths) == 1:
@@ -132,6 +141,15 @@ class MyDataset(Dataset):
             paths = paths[:5]
         data = np.concatenate([np.load(p) for p in paths])
         ts_lengths = [np.load(p).shape[0] for p in paths]
+        
+        if self.feats > 0:
+            if self.enc:
+                max_feats = self.feats + self.enc_feats
+            else:
+                max_feats = self.feats
+            data = data[:, :max_feats]
+        else:
+            self.feats = data.shape[1] - self.enc_feats
 
         if type == 'test':
             l_paths = glob.glob(os.path.join(folder, f'*{labelfile}*.npy'))
@@ -199,6 +217,13 @@ class MyDataset(Dataset):
     def get_ideal_lengths(self):
         return self.ideal_lengths
     
+    def __get_enc_feats__(self):
+        # number of additional time encoder covariates, usually 4
+        if self.enc:
+            return 4
+        else:
+            return 0
+    
     def get_labels(self):
         assert self.flag == 'test'
         # if labels are 1D, repeat them for each feature to have 2D labels
@@ -208,11 +233,11 @@ class MyDataset(Dataset):
     
     def get_complete_data(self):
         # for plots or if we want to use unsliced data
-        return self.complete_data
+        return self.complete_data[:, self.enc_feats:]
     
     def get_complete_data_wpadding(self):
         # for plots or if we want to use unsliced data with padding
-        return self.data.reshape(-1, self.feats)
+        return self.data[:, :, self.enc_feats:].reshape(-1, self.feats)
 
 
 if __name__ == '__main__':

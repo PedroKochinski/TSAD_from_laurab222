@@ -71,22 +71,34 @@
 # do
 #     echo "rep $i"
 #     # echo "data set $d"
-#     # python main.py --model TranAD --n_window 10 --dataset IEEECIS_new2.2. --step_size 1 --epochs 20 --retrain --feats 30 --k $k --name $i
-#     python main.py --model iTransformer --n_window 10 --dataset IEEECIS_new2.2 --step_size 1 --epochs 200 --retrain --feats 30 --k $i --name latent2_$i
-#     python main.py --model iTransformer --n_window 100 --dataset IEEECIS_new2.2 --step_size 50 --epochs 200 --retrain --feats 30 --k $i --name latent2_$i
+#     python main.py --model TranAD --n_window 10 --dataset IEEECIS_new2.2 --step_size 1 --epochs 200 --retrain --feats 30 --k $i --name $i
+#     # python main.py --model iTransformer --n_window 10 --dataset IEEECIS_new2.2 --step_size 1 --epochs 200 --retrain --feats 30 --k $i --name latent2_$i
+#     # python main.py --model iTransformer --n_window 100 --dataset IEEECIS_new2.2 --step_size 50 --epochs 200 --retrain --feats 30 --k $i --name latent2_$i
 # done
 
-for d in SMD  MSL_new # ATLAS_TS SMAP_new SWaT UCR
+for d in GECCO # UCR GECCO  # ATLAS_TS
 do
     echo "data set $d"
     for i in {1..5}
     do  
         echo "rep $i"
-        # python main.py --model TranAD --n_window 10 --dataset $d --step_size 1 --epochs 20 --retrain --feats -1 --name $i
-        python main.py --model iTransformer --n_window 10 --dataset $d --step_size 1 --epochs 200 --retrain --feats -1 --k $i --name latent2_$i --less
-        python main.py --model iTransformer --n_window 100 --dataset $d --step_size 50 --epochs 200 --retrain --feats -1 --k $i --name latent2_$i --less
+        # python main.py --model TranAD --n_window 10 --dataset $d --step_size 1 --epochs 200 --retrain --feats -1 --k $i --name $i
+        python main.py --model iTransformer --n_window 10 --dataset $d --step_size 1 --epochs 5 --retrain --feats -1 --k $i --name latent2_shuffled_$i 
+        python main.py --model iTransformer --n_window 100 --dataset $d --step_size 50 --epochs 5 --retrain --feats -1 --k $i --name latent2_shuffled_$i 
     done
 done
+
+# for d in SMD # SWaT UCR GECCO ATLAS_TS SMD MSL_new
+# do
+#     echo "data set $d"
+#     for i in {1..5}
+#     do  
+#         echo "rep $i"
+#         # python main.py --model TranAD --n_window 10 --dataset $d --step_size 1 --epochs 200 --test --feats -1 --k $i --name $i --less
+#         python main.py --model iTransformer --n_window 10 --dataset $d --step_size 1 --epochs 200 --test --feats -1 --k $i --name latent2_$i --less
+#         python main.py --model iTransformer --n_window 100 --dataset $d --step_size 50 --epochs 200 --test --feats -1 --k $i --name latent2_$i --less
+#     done
+# done
 
 # # for d in  # SMD SMAP_new UCR ATLAS_TS SWaT
 # do
