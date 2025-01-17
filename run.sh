@@ -76,15 +76,15 @@
 #     # python main.py --model iTransformer --n_window 100 --dataset IEEECIS_new2.2 --step_size 50 --epochs 200 --retrain --feats 30 --k $i --name latent2_$i
 # done
 
-for d in GECCO # UCR GECCO  # ATLAS_TS
+for d in GECCO # UCR GECCO SWaT_1D # ATLAS_TS
 do
     echo "data set $d"
     for i in {1..5}
     do  
         echo "rep $i"
-        # python main.py --model TranAD --n_window 10 --dataset $d --step_size 1 --epochs 200 --retrain --feats -1 --k $i --name $i
-        python main.py --model iTransformer --n_window 10 --dataset $d --step_size 1 --epochs 5 --retrain --feats -1 --k $i --name latent2_shuffled_$i 
-        python main.py --model iTransformer --n_window 100 --dataset $d --step_size 50 --epochs 5 --retrain --feats -1 --k $i --name latent2_shuffled_$i 
+        python main.py --model TranAD --n_window 10 --dataset $d --step_size 1 --epochs 200 --retrain --feats -1 --k $i --name $i
+        python main.py --model iTransformer --n_window 10 --dataset $d --step_size 1 --epochs 200 --retrain --feats -1 --k $i --name latent2_$i 
+        python main.py --model iTransformer --n_window 100 --dataset $d --step_size 50 --epochs 200 --retrain --feats -1 --k $i --name latent2_$i 
     done
 done
 

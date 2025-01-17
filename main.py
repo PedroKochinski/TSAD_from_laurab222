@@ -542,12 +542,13 @@ if __name__ == '__main__':
 				lossV = 0
 			tqdm.write(f'Epoch {e},\tL_train = {lossT}, \t\tL_valid = {lossV}, \tLR = {lr}')
 			accuracy_list.append((lossT, lossV, lr))
+			save_model(checkpoints_path, model, optimizer, scheduler, e, accuracy_list, f'_epoch{e}')
 			if args.k > 0 and early_stopper.early_stop(-lossV):
 				print(f'{color.HEADER}Early stopping at epoch {e}{color.ENDC}')
 				break
 		train_time = time() - start_time
 		print(f'{color.BOLD}Training time: {"{:10.4f}".format(train_time)} s or {"{:.2f}".format(train_time/60)} min {color.ENDC}')
-		save_model(checkpoints_path, model, optimizer, scheduler, e, accuracy_list, '_final')
+		# save_model(checkpoints_path, model, optimizer, scheduler, e, accuracy_list, '_final')
 		plot_accuracies(accuracy_list, plot_path)
 		plot_losses(accuracy_list, plot_path)
 		np.save(f'{checkpoints_path}/accuracy_list.npy', accuracy_list)
