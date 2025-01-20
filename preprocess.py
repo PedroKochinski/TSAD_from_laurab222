@@ -43,7 +43,8 @@ def normalize3(a, min_a = 0, max_a = 1):  # min_a = None, max_a = None
 	return (a - min_a) / (max_a - min_a + 0.0001), min_a, max_a
 
 def convertNumpy(df):
-	x = df[df.columns[3:]].values[::10, :]
+	# x = df[df.columns[3:]].values[::10, :]
+	x = df[df.columns[3:]]  # want to keep all values and not filter out 1/10
 	return (x - x.min(0)) / (x.ptp(0) + 1e-4)
 
 def load_data(dataset):
