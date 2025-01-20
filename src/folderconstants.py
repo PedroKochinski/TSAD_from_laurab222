@@ -1,3 +1,3 @@
 # Data folders
-output_folder = 'processed'
-data_folder = 'data'
+output_folder = '../processed'
+data_folder = '../data'

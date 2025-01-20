@@ -3,6 +3,7 @@ import math
 import glob
 import numpy as np
 import torch
+from src.folderconstants import *
 from torch.utils.data import Dataset, DataLoader
 
 
@@ -61,7 +62,7 @@ class MyDataset(Dataset):
             self.__make_windows__(self.data)
 
     def __load_data__(self, type='train'):
-        folder = os.path.join('processed', self.data_name)
+        folder = os.path.join(output_folder, self.data_name)
         if not os.path.exists(folder):
             raise Exception('Processed Data not found.')
 

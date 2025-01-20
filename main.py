@@ -451,6 +451,7 @@ def local_anomaly_labels(preds, labels, q, plot_path=None, nb_adim=1):
 
 if __name__ == '__main__':
 	print(args, '\n')
+	print(torch.cuda.is_available())
 
 	# define path for results, checkpoints & plots & create directories
 	if args.name:
@@ -549,7 +550,7 @@ if __name__ == '__main__':
 		train_time = time() - start_time
 		print(f'{color.BOLD}Training time: {"{:10.4f}".format(train_time)} s or {"{:.2f}".format(train_time/60)} min {color.ENDC}')
 		save_model(checkpoints_path, model, optimizer, scheduler, e, accuracy_list, '_final')
-		if os.path.exists(f'{checkpoints_path}/model_best.ckpt'):
+		if not os.path.exists(f'{checkpoints_path}/model_best.ckpt'):
 			save_model(checkpoints_path, model, optimizer, scheduler, e, accuracy_list, '_best')
 		plot_accuracies(accuracy_list, plot_path)
 		plot_losses(accuracy_list, plot_path)
