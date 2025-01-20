@@ -1,5 +1,5 @@
 pandas
-# tqdm
+tqdm
 matplotlib
 # dgl
 numpy

@@ -549,12 +549,17 @@ if __name__ == '__main__':
 		train_time = time() - start_time
 		print(f'{color.BOLD}Training time: {"{:10.4f}".format(train_time)} s or {"{:.2f}".format(train_time/60)} min {color.ENDC}')
 		save_model(checkpoints_path, model, optimizer, scheduler, e, accuracy_list, '_final')
+		if os.path.exists(f'{checkpoints_path}/model_best.ckpt'):
+			save_model(checkpoints_path, model, optimizer, scheduler, e, accuracy_list, '_best')
 		plot_accuracies(accuracy_list, plot_path)
 		plot_losses(accuracy_list, plot_path)
 		np.save(f'{checkpoints_path}/accuracy_list.npy', accuracy_list)
 
 	### Testing phase
 	torch.zero_grad = True
+	if args.k > 0:  # if using validation set, make sure to load best model
+		checkpoint = torch.load(f'{checkpoints_path}/model_best.ckpt')
+		model.load_state_dict(checkpoint['model_state_dict'])
 	model.eval()
 	print(f'{color.HEADER}Testing {args.model} on {args.dataset}{color.ENDC}')
 
