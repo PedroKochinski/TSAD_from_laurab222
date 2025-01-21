@@ -1,7 +1,7 @@
 import os, sys
 import pandas as pd
 from tqdm import tqdm
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader
 import torch.nn as nn
 from time import time
 from pprint import pprint
@@ -220,11 +220,8 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 				local_bs = d.shape[0]
 				window = d.permute(1, 0, 2)
 				elem = window[-1, :, :].view(1, local_bs, feats)
-				if not l1s and n<=1: 
-					summary(model, input_data=[window, elem])
-					with open(f'{folder}/config.txt', 'a') as f:
-						f.write('\nModel Summary:\n')
-						f.write(str(summary(model, input_data=[window, elem], depth=5, verbose=0)))
+				# if not l1s and n<=1: 
+				# 	summary(model, input_data=[window, elem])
 				z = model(window, elem)
 				if prob:  # sample from probabilistic output
 					if isinstance(z, tuple):  # if z = (x1, x2)
@@ -290,8 +287,8 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 				else:
 					d_enc = None
 				# don't invert d because we have permutation later in DataEmbedding_inverted as part of model
-				if epoch == 0 and l1s == []: 
-					summary(model, input_data=d, depth=5, verbose=1)
+				# if epoch == 0 and l1s == []: 
+				# 	summary(model, input_data=d, depth=5, verbose=1)
 				if model.output_attention:
 					z = model(d, d_enc)[0]
 				else:
