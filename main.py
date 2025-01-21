@@ -494,11 +494,11 @@ if __name__ == '__main__':
 	print(f'total params: {total_params}, trainable params: {trainable_params}')
 
 	# Create data loader
-	data_loader_train = DataLoader(train, batch_size=model.batch, shuffle=True)
+	data_loader_train = DataLoader(train, batch_size=model.batch, shuffle=False)
 	data_loader_test = DataLoader(test, batch_size=model.batch, shuffle=False)
-	data_loader_train_test = DataLoader(train_test, batch_size=model.batch, shuffle=True)
+	data_loader_train_test = DataLoader(train_test, batch_size=model.batch, shuffle=False)
 	if args.k > 0:
-		data_loader_valid = DataLoader(valid, batch_size=model.batch, shuffle=True)
+		data_loader_valid = DataLoader(valid, batch_size=model.batch, shuffle=False)
 
 	# save arguments and additional info in config file
 	with open(f'{folder}/config.txt', 'w') as f:
@@ -506,6 +506,10 @@ if __name__ == '__main__':
 		f.write(str(args)+'\n')
 		f.write(f'total params: {total_params}, trainable params: {trainable_params}\n')
 		f.write(f'feats: {feats}\n')
+		f.write(f'train: {train.__len__()}\n')
+		if args.k > 0:
+			f.write(f'valid: {valid.__len__()}\n')
+		f.write(f'test: {test.__len__()}\n')
 		f.write(f'ts_lengths train: {train.get_ts_lengths()}\n')
 		if args.k > 0:
 			f.write(f'ts_lengths valid: {valid.get_ts_lengths()}\n')
