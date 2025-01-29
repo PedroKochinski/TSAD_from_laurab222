@@ -414,7 +414,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 				return loss.detach().numpy()
 
 
-def local_pot(loss, lossT, labels, q):
+def local_pot(loss, lossT, labels, q=1e-5, plot_path=None):
 	# get anomaly labels
 	df_res_local = pd.DataFrame()
 	preds = []
@@ -429,7 +429,7 @@ def local_pot(loss, lossT, labels, q):
 	return preds, df_res_local
 
 
-def local_anomaly_labels(preds, labels, q, plot_path=None, nb_adim=1):
+def local_anomaly_labels(preds, labels, q=1e-5, plot_path=None, nb_adim=1):
 	labelspred = (np.sum(preds, axis=1) >= nb_adim) + 0
 
 	if plot_path is not None:
@@ -487,6 +487,9 @@ if __name__ == '__main__':
 	if args.model in ['MERLIN']:
 		eval(f'run_{args.model.lower()}(test_loader, labels, args.dataset)')
 	model, optimizer, scheduler, epoch, accuracy_list = load_model(args.model, feats, args.n_window, args.step_size, checkpoints_path, args.prob, args.weighted)
+
+	# print(model.transformer_encoder.layers[0].self_attn.in_proj_weight)
+	# print(model.transformer_encoder.layers[0].self_attn.in_proj_bias)
 
 	# Calculate and print the number of parameters
 	total_params = sum(p.numel() for p in model.parameters())
@@ -652,7 +655,7 @@ if __name__ == '__main__':
 	# 	print(labels.shape, labels[labels[:,0]==1].shape, labels[labels[:,0]==0].shape)
 
 	### anomaly labels
-	preds, df_res_local = local_pot(loss, lossT, labels, args.q)
+	preds, df_res_local = local_pot(loss, lossT, labels, args.q, plot_path)
 	true_labels = (np.sum(labels, axis=1) >= 1) + 0
 	# local anomaly labels
 	labelspred, result_local1 = local_anomaly_labels(preds, true_labels, args.q, plot_path, nb_adim=1)
@@ -680,7 +683,7 @@ if __name__ == '__main__':
 	labelspred_glob = (pred2 >= 1) + 0
 
 	plot_labels(plot_path, 'labels_global', y_pred=labelspred_glob, y_true=true_labels)
-	metrics_global = calc_point2point(predict=labelspred_glob, actual=true_labels)
+	# metrics_global = calc_point2point(predict=labelspred_glob, actual=true_labels)
 	result_global.update(hit_att(loss, labels))
 	result_global.update(ndcg(loss, labels))
 	if not args.test:

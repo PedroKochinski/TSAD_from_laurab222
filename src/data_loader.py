@@ -30,7 +30,7 @@ class MyDataset(Dataset):
             feats (int, optional): The number of features in the dataset. Defaults to None (then automatically == nb of input features).
             less (bool, optional): A flag indicating whether to load a smaller subset (10k timestamps) of the data. Defaults to False.
             enc (bool, optional): A flag indicating whether to use encoding of timestamp. Defaults to False.
-            k (int, optional): Whether to do a 5-fold cross validation, k indicates which fold to use for validation. Defaults to -1.
+            k (int, optional): Whether to do a 5-fold cross validation, k indicates which fold to use for validation. Must be > 0 and defaults to -1.
         Methods:
             __load_data__(type): Loads the data based on the specified type.
             __make_windows__(data): Creates windows of data segments based on the window size.
@@ -68,6 +68,7 @@ class MyDataset(Dataset):
 
         file = 'train' if type == 'valid' else type
         labelfile = 'labels'
+        kfold = False
 
         if self.less and self.data_name in file_prefixes.keys():
                 file = file_prefixes[self.data_name] + file
@@ -83,6 +84,7 @@ class MyDataset(Dataset):
                 paths = paths[:self.k*n] + paths[(self.k+1)*n:]
             elif type == 'valid':
                 paths = paths[self.k*n:(self.k+1)*n] 
+            kfold = True
         data = np.concatenate([np.load(p) for p in paths])
         ts_lengths = [np.load(p).shape[0] for p in paths]
 
@@ -100,13 +102,13 @@ class MyDataset(Dataset):
             self.feats = data.shape[1] - self.enc_feats
 
         if self.less and self.data_name not in file_prefixes.keys():
-            data = data[:5000]
+            data = data[:50000]
             ts_lengths = [data.shape[0]]
             if type == 'test':  
-                labels = labels[:5000]
+                labels = labels[:50000]
 
         # 5-fold cross validation
-        if self.k >= 0 and len(paths) == 1:
+        if not kfold and self.k >= 0 and len(paths) == 1:
             n = data.shape[0] // 5
             if type == 'train':
                 data = np.concatenate([data[:self.k*n], data[(self.k+1)*n:]])
@@ -242,13 +244,14 @@ class MyDataset(Dataset):
 
 
 if __name__ == '__main__':
-    dataset = 'SMD'
+    dataset = 'UCR'
     # Create dataset
-    train = MyDataset(dataset, window_size=10, step_size=1, modelname='iTransformer', flag='train', feats=30, less=False, enc=False, k=1)
-    valid = MyDataset(dataset, window_size=10, step_size=1, modelname='iTransformer', flag='valid', feats=30, less=False, enc=False, k=1)
+    train = MyDataset(dataset, window_size=10, step_size=1, modelname='iTransformer', flag='train', feats=30, less=False, enc=False, k=4)
+    valid = MyDataset(dataset, window_size=10, step_size=1, modelname='iTransformer', flag='valid', feats=30, less=False, enc=False, k=4)
     test = MyDataset(dataset, window_size=10, step_size=1, modelname='iTransformer', flag='test', feats=30, less=False, enc=False, k=-1)
     print(train.__len__(), train.data.shape, train.complete_data.shape)
     print(valid.__len__(), valid.data.shape)
+    print(train.get_ts_lengths(), valid.get_ts_lengths())
     print(test.__len__(), test.data.shape)
     labels = test.get_labels()
     print(labels.shape)
@@ -257,8 +260,8 @@ if __name__ == '__main__':
     data_loader_train = DataLoader(train, batch_size=24, shuffle=True)
     data_loader_test = DataLoader(test, batch_size=24, shuffle=True)
 
-    # # Iterate through the data loader
-    for batch in data_loader_train:
-        print(batch.shape)
-    for batch in data_loader_test:
-        print(batch.shape)
+    # # # Iterate through the data loader
+    # for batch in data_loader_train:
+    #     print(batch.shape)
+    # for batch in data_loader_test:
+    #     print(batch.shape)
