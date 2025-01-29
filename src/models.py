@@ -579,7 +579,7 @@ class TranAD(nn.Module):
 		return x1_out, x2
 
 class iTransformer(nn.Module):
-	def __init__(self, feats, n_window, step_size=None, prob=False, weighted_window=False):
+	def __init__(self, feats, n_window, step_size=None, prob=False, weighted_window=False, forecasting=False):
 		super(iTransformer, self).__init__()
 		self.name = 'iTransformer'
 		self.weighted = weighted_window
@@ -594,7 +594,11 @@ class iTransformer(nn.Module):
 		self.n = self.n_feats * self.n_window
 		self.seq_len = self.n_window
 		self.label_len = self.n_window
-		self.pred_len = self.n_window
+		self.forecasting = forecasting 		# whether model output should be reconstruction or forecasting of input
+		if self.forecasting:
+			self.pred_len = 1  				# for forecasting-based AD, only want to predict 1 step ahead
+		else:
+			self.pred_len = self.n_window
 		self.output_attention = False
 		self.use_norm = True
 		self.d_model = 2  # int(self.n_window / 2) # * feats  # 512

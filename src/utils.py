@@ -30,11 +30,11 @@ def save_model(folder, model, optimizer, scheduler, epoch, accuracy_list, name='
         'scheduler_state_dict': scheduler.state_dict(),
         'accuracy_list': accuracy_list}, file_path)
 
-def load_model(modelname, dims, n_window, step_size=None, path=None, prob=False, weighted=False):
+def load_model(modelname, dims, n_window, step_size=None, path=None, prob=False, weighted=False, forecasting=False):
 	import src.models
 	model_class = getattr(src.models, modelname)
 	if modelname == 'iTransformer':
-		model = model_class(dims, n_window, step_size, prob, weighted).double()
+		model = model_class(dims, n_window, step_size, prob, weighted, forecasting).double()
 	else:
 		model = model_class(dims, n_window, prob).double()
 	optimizer = torch.optim.AdamW(model.parameters() , lr=model.lr, weight_decay=1e-5)

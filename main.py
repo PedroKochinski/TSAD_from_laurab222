@@ -279,25 +279,41 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 			weights = torch.tensor(weights).view(-1,1).double()
 		if training:
 			l1s = []
-			for dx, dy  in dataloader:
-				local_bs = dx.shape[0]
-				if enc_feats>0:
-					d_enc = dx[:, :, :enc_feats]
-					dx = dx[:, :, enc_feats:]
-					dy = dy[:, :, enc_feats:]
+			for d in data: # d.shape is [B, n_window, N] or d = (dx, dy)
+				# local_bs = d.shape[0]
+				if model.forecasting:	
+					elem = d[1][:, -1, :].view(-1, 1, feats)  # [B, 1, N]
+					d = d[0]								  # [B, n_window, N]
+				else:
+					elem = d
+				if enc_feats > 0:
+					d_enc = d[:, :, :enc_feats]
+					d = d[:, :, enc_feats:]
 				else:
 					d_enc = None
 				# don't invert d because we have permutation later in DataEmbedding_inverted as part of model
-				dy = dy.permute(1, 0, 2)[-1,:,:] # [1, B, N]
-				# if not l1s: 
-				# 	summary(model, input_size=[1, args.n_window, args.feats])
+				# if epoch == 0 and l1s == []: 
+				# 	summary(model, input_data=d, depth=5, verbose=1)
 				if model.output_attention:
-					z = model(dx, d_enc)[0]
+					z = model(d, d_enc)[0]
 				else:
-					z = model(dx, d_enc)
-				l1 = l(z, dy)
+					z = model(d, d_enc)
+				if prob:  # sample from probabilistic output
+					z_mu = z[0]
+					z_logsigma = z[1]
+					z = z_mu + torch.randn(size=z_logsigma.size())*torch.exp(z_logsigma)
+				l1 = l(z, elem)
+				# if model.weighted:
+				# 	l1 = l1 * weights
 				l1s.append(torch.mean(l1).item())
-				loss = torch.mean(l1)
+				if prob:
+					z_std = torch.exp(z_logsigma)
+					loss = torch.mean(l1/z_std) + torch.mean(z_std)
+					# loss = torch.mean(l1)
+					# loss_fct = torch.nn.GaussianNLLLoss(eps=1e-6, reduction='mean')
+					# loss = loss_fct(z, elem, torch.exp(2*z_logsigma))
+				else:
+					loss = torch.mean(l1)
 				optimizer.zero_grad()
 				loss.backward(retain_graph=True)
 				optimizer.step()
@@ -305,28 +321,92 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 			return np.mean(l1s), optimizer.param_groups[0]['lr']
 		else:
 			z_all = torch.empty(0)
-			for dx, dy in dataloader:
-				local_bs = dx.shape[0]
+			if model.weighted:
+				# loss = torch.zeros(size=(model.batch * model.n_window, feats))
+				# new test: get loss according to position in window
+				loss = torch.zeros(size=(model.n_window, feats))
+			else:
+				loss = torch.empty(0)
+			for i, d in enumerate(data): # d.shape is [B, n_window, N]
+				# local_bs = d.shape[0]
+				if model.forecasting:	
+					elem = d[1][:, -1, :].view(-1, 1, feats)  # [B, 1, N]
+					d = d[0]								  # [B, n_window, N]
+				else:
+					elem = d
 				if enc_feats > 0:
-					d_enc = dx[:, :, :enc_feats]
-					dx = dx[:, :, enc_feats:]
-					dy = dy[:, :, enc_feats:]
+					d_enc = d[:, :, :enc_feats]
+					d = d[:, :, enc_feats:]
 				else:
 					d_enc = None
-				# don't invert d because we have permutation later in DataEmbedding_inverted
-				dy = dy.permute(1, 0, 2)[-1,:,:] # [1, B, N]
 				if model.output_attention:
-					z = model(dx, d_enc)[0]
+					z = model(d, d_enc)[0]
 				else:
-					z = model(dx, d_enc)
-				l1 = l(z, dy)
+					z = model(d, d_enc)
+				if prob:  # don't sample from probabilistic output for testing, just use mean
+					z_mu = z[0]
+					z_logsigma = z[1]
+					z = z_mu
+				l1 = l(z, elem)				
+				# loss_fct = torch.nn.GaussianNLLLoss(eps=1e-6, reduction='none')
+				# l1 = loss_fct(z, elem, torch.exp(2*z_logsigma))
+				if model.weighted:
+					# l1_weighted = l1 * weights 
+					# idx = i * local_bs * model.test_step_size
+					# for j in range(local_bs):
+					# 	start = idx +  j*model.test_step_size
+					# 	stop = start + model.n_window	
+					# 	loss[start:stop] += l1_weighted[j]
+					# print(start, stop, idx)
+					# new test: get loss according to position in window
+					l1s = l1.mean(dim=0)
+					loss += l1s
+				else:
+					loss = torch.cat((loss, l1), dim=0)
+					# loss = torch.cat((loss, l1.reshape(-1, feats)), dim=0)
+				if pred:
+					z_all = torch.cat((z_all, z), dim=0)
+					# z_all = torch.cat((z_all, z.reshape(-1, feats)), dim=0)
+			if not model.weighted:
+				loss = loss.view(-1, feats)
+			# if prob:
+			# 	z_std = torch.exp(z_logsigma)
+			# 	loss = loss / z_std  #+ z_std
+			if pred:
+				z_all = z_all.view(-1, feats)
+				return loss.detach().numpy(), z_all.detach().numpy() # because we have unnecessary third dimension
+			else:
+				return loss.detach().numpy()
+	elif 'LSTM_AE' in model.name:
+		bs = model.batch # if training else len(data)
+		n = epoch + 1
+		if training:
+			l1s = []
+			for d in data:
+				y_pred = model(d)
+				l1 = l(y_pred, d)
+				l1s.append(torch.mean(l1).item())
+				loss = torch.mean(l1)
+				optimizer.zero_grad()
+				loss.backward(retain_graph=True)
+				optimizer.step()
+			scheduler.step()
+			# tqdm.write(f'Epoch {epoch},\tL1 = {np.mean(l1s)}')
+			return np.mean(l1s), optimizer.param_groups[0]['lr']
+		else:
+			loss = torch.empty(0)
+			z_all = torch.empty(0)
+			for d in data:
+				y_pred = model(d)
+				l1 = l(y_pred, d)
 				loss = torch.cat((loss, l1), dim=0)
-				z_all = torch.cat((z_all, z), dim=0)
-				# loss = torch.cat((loss, l1.permute(1, 0, 2)), dim=0)
-				# z_all = torch.cat((z_all, z.permute(1, 0, 2)), dim=0)
-			# loss = loss.view((data.shape[0]* data.shape[1], feats))
-			# z_all = z_all.view((data.shape[0]* data.shape[1], feats))
-			return loss.detach().numpy(), z_all.detach().numpy() # because we have unnecessary third dimension
+				z_all = torch.cat((z_all, d), dim=0)
+			loss = loss.view((-1, feats))
+			z_all = z_all.view((-1, feats))
+			if pred:
+				return loss.detach().numpy(), z_all.detach().numpy()
+			else:
+				return loss.detach().numpy()
 	else:
 		y_pred = model(data)
 		loss = l(y_pred, data)
@@ -394,13 +474,13 @@ if __name__ == '__main__':
 	os.makedirs(plot_path, exist_ok=True)
 	os.makedirs(res_path, exist_ok=True)
 
-	train = MyDataset(args.dataset, args.n_window, args.step_size, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=args.k)
-	if args.weighted:
-		test = MyDataset(args.dataset, args.n_window, args.step_size, args.model, flag='test', feats=args.feats, less=args.less, enc=args.enc, k=-1)
-		train_test = MyDataset(args.dataset, args.n_window, args.step_size, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=-1)
+	train = MyDataset(args.dataset, args.n_window, args.step_size, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=args.k, forecasting=args.forecasting)
+	if args.weighted or args.forecasting:
+		test = MyDataset(args.dataset, args.n_window, args.step_size, args.model, flag='test', feats=args.feats, less=args.less, enc=args.enc, k=-1, forecasting=args.forecasting)
+		train_test = MyDataset(args.dataset, args.n_window, args.step_size, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=-1, forecasting=args.forecasting)
 	else:
-		test = MyDataset(args.dataset, args.n_window, args.n_window, args.model, flag='test', feats=args.feats, less=args.less, enc=args.enc, k=args.k)
-		train_test = MyDataset(args.dataset, args.n_window, args.n_window, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=-1)
+		test = MyDataset(args.dataset, args.n_window, args.n_window, args.model, flag='test', feats=args.feats, less=args.less, enc=args.enc, k=-1, forecasting=args.forecasting)
+		train_test = MyDataset(args.dataset, args.n_window, args.n_window, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=-1,forecasting=args.forecasting)
 	labels = test.get_labels()
 	
 	print('train set', train.__len__(), train.data.shape)
@@ -408,7 +488,7 @@ if __name__ == '__main__':
 	print('labels', labels.shape)
 	
 	if args.k > 0:
-		valid = MyDataset(args.dataset, args.n_window, args.step_size, args.model, flag='valid', feats=args.feats, less=args.less, enc=args.enc, k=args.k)
+		valid = MyDataset(args.dataset, args.n_window, args.step_size, args.model, flag='valid', feats=args.feats, less=args.less, enc=args.enc, k=args.k, forecasting=args.forecasting)
 		print(f'{args.k}-fold valid set', valid.__len__(), valid.data.shape)
 
 	feats = train.feats
@@ -416,7 +496,7 @@ if __name__ == '__main__':
 	
 	if args.model in ['MERLIN']:
 		eval(f'run_{args.model.lower()}(test_loader, labels, args.dataset)')
-	model, optimizer, scheduler, epoch, accuracy_list = load_model(args.model, feats, args.n_window, args.step_size, checkpoints_path, args.prob, args.weighted)
+	model, optimizer, scheduler, epoch, accuracy_list = load_model(args.model, feats, args.n_window, args.step_size, checkpoints_path, args.prob, args.weighted, forecasting=args.forecasting)
 
 	# print(model.transformer_encoder.layers[0].self_attn.in_proj_weight)
 	# print(model.transformer_encoder.layers[0].self_attn.in_proj_bias)
@@ -548,7 +628,7 @@ if __name__ == '__main__':
 		plotter(plot_path, testOO, y_pred, loss, nolabels, test.get_ideal_lengths(), name='output_padded')
 	
 	print(lossT.shape, loss.shape, labels.shape)
-	if 'iTransformer' in model.name or model.name in ['LSTM_AE']:
+	if ('iTransformer' in model.name or model.name in ['LSTM_AE']) and not args.forecasting:
 		# cut out the padding from test data, loss tensors
 		lossT_tmp, loss_tmp, y_pred_tmp = [], [], []
 		print(test.get_ts_lengths(), np.sum(test.get_ts_lengths()), len(test.get_ts_lengths()))

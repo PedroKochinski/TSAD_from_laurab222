@@ -21,6 +21,7 @@ def parse_arguments() -> argparse.Namespace:
 	parser.add_argument('--test', action='store_true', help="test the model")
 	parser.add_argument('--retrain', action='store_true', help="retrain the model")
 	parser.add_argument('--less', action='store_true', help="train using less data")
+	parser.add_argument('--forecasting', action='store_true', required=False, help="forecasting AD instead of reconstruction")
 	parser.add_argument('--prob', action='store_true', help="model gives back probabilistic output")
 	parser.add_argument('--weighted', action='store_true', help="use weighted loss over time stamps in a window")
 	parser.add_argument('--enc', action='store_true', help="use additional time encoder covariate")
