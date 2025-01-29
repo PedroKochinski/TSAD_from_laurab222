@@ -127,6 +127,7 @@ def get_result(pred, labels):
         'FP': p_t[5],
         'FN': p_t[6],
         'ROC/AUC': p_t[7],
+		'MCC': p_t[8],
     }
 	return result
 

@@ -20,9 +20,9 @@ def cut_array(percentage, arr):
 	window = round(arr.shape[0] * percentage * 0.5)
 	return arr[mid - window : mid + window, :]
 
-def save_model(folder, model, optimizer, scheduler, epoch, accuracy_list):
+def save_model(folder, model, optimizer, scheduler, epoch, accuracy_list, name=''):
 	os.makedirs(folder, exist_ok=True)
-	file_path = f'{folder}/model.ckpt'
+	file_path = f'{folder}/model{name}.ckpt'
 	torch.save({
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
@@ -30,16 +30,19 @@ def save_model(folder, model, optimizer, scheduler, epoch, accuracy_list):
         'scheduler_state_dict': scheduler.state_dict(),
         'accuracy_list': accuracy_list}, file_path)
 
-def load_model(modelname, dims, path=None):
+def load_model(modelname, dims, n_window, step_size=None, path=None, prob=False, weighted=False):
 	import src.models
 	model_class = getattr(src.models, modelname)
-	model = model_class(dims, args.n_window, args.prob).double()
+	if modelname == 'iTransformer':
+		model = model_class(dims, n_window, step_size, prob, weighted).double()
+	else:
+		model = model_class(dims, n_window, prob).double()
 	optimizer = torch.optim.AdamW(model.parameters() , lr=model.lr, weight_decay=1e-5)
 	scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 5, 0.9)
 	if path is not None:
-		fname = os.path.join(path, 'model.ckpt')
+		fname = os.path.join(path, 'model_final.ckpt')
 	else:
-		fname = f'{args.model}_{args.dataset}/n_window{args.n_window}/checkpoints/model.ckpt'
+		fname = f'{args.model}_{args.dataset}/n_window{args.n_window}/checkpoints/model_final.ckpt'
 	if (os.path.exists(fname) and not args.retrain) or args.test:
 		print(f"{color.GREEN}Loading pre-trained model: {model.name}{color.ENDC} from {fname}")
 		checkpoint = torch.load(fname)
@@ -52,3 +55,31 @@ def load_model(modelname, dims, path=None):
 		print(f"{color.GREEN}Creating new model: {model.name}{color.ENDC}")
 		epoch = -1; accuracy_list = []
 	return model, optimizer, scheduler, epoch, accuracy_list
+
+class EarlyStopper:
+	def __init__(self, patience=2, min_delta=0):
+		self.patience = patience
+		self.min_delta = min_delta
+		self.counter = 0
+		self.min_validation_loss = None
+	
+	def early_stop(self, validation_loss):
+		if self.min_validation_loss is None:
+			self.min_validation_loss = validation_loss
+		elif validation_loss <= (self.min_validation_loss + self.min_delta):
+			if validation_loss > self.min_validation_loss:
+				self.min_validation_loss = validation_loss
+			self.counter += 1
+			if self.counter >= self.patience:
+				return True
+		else:
+			self.min_validation_loss = validation_loss
+			self.counter = 0
+		# if validation_loss < self.min_validation_loss:
+		#     self.min_validation_loss = validation_loss
+		#     self.counter = 0
+		# elif validation_loss > (self.min_validation_loss + self.min_delta):
+		#     self.counter += 1
+		#     if self.counter >= self.patience:
+		#         return True
+		return False
