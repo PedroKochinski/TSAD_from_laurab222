@@ -8,17 +8,14 @@ from torch.utils.data import Dataset, DataLoader
 
 
 file_prefixes = {
-	'SMD': 'machine-1-1_',
-	'SMAP': 'P-1_',
-	'SMAP_new': 'P-1_',
-	'MSL': 'C-1_',
-	'MSL_new': 'C-1_',
+	'SMD': ['machine-1-1_', 'machine-2-1_', 'machine-3-2_', 'machine-3-7_'],
+	'SMAP_new': ['A-4_', 'T-1_'],
+	'MSL_new': 'C-2_',
 	'UCR': '136_',
-	'NAB': 'ec2_request_latency_system_failure_',
 }
 
 class MyDataset(Dataset):
-    def __init__(self, dataset, window_size, step_size, modelname, flag='train', feats=-1, less=False, enc=False, k=-1):
+    def __init__(self, dataset, window_size, step_size, modelname, flag='train', feats=-1, less=False, enc=False, k=-1, shuffle=False):
         """
         Initializes the data loader with the specified parameters.
         Args:
@@ -31,6 +28,7 @@ class MyDataset(Dataset):
             less (bool, optional): A flag indicating whether to load a smaller subset (10k timestamps) of the data. Defaults to False.
             enc (bool, optional): A flag indicating whether to use encoding of timestamp. Defaults to False.
             k (int, optional): Whether to do a 5-fold cross validation, k indicates which fold to use for validation. Must be > 0 and defaults to -1.
+            shuffle (bool, optional): A flag indicating whether to shuffle the train and validation data. Defaults to False.
         Methods:
             __load_data__(type): Loads the data based on the specified type.
             __make_windows__(data): Creates windows of data segments based on the window size.
@@ -44,6 +42,7 @@ class MyDataset(Dataset):
         self.feats = feats
         self.enc = enc
         self.enc_feats = self.__get_enc_feats__()
+        self.shuffle = shuffle
         
         self.flag = flag
         self.less = less
@@ -71,10 +70,19 @@ class MyDataset(Dataset):
         kfold = False
 
         if self.less and self.data_name in file_prefixes.keys():
-                file = file_prefixes[self.data_name] + file
-                labelfile = file_prefixes[self.data_name] + labelfile
+                if isinstance(file_prefixes[self.data_name], list):
+                    paths = []; labelfile_complete = []
+                    for prefix in file_prefixes[self.data_name]:
+                        file_complete = prefix + file
+                        labelfile_complete.append(prefix + labelfile)
+                        paths.append(glob.glob(os.path.join(folder, f'*{file_complete}*.npy'))[0])
+                else:
+                    file = file_prefixes[self.data_name] + file
+                    labelfile = file_prefixes[self.data_name] + labelfile
+                    paths = glob.glob(os.path.join(folder, f'*{file}*.npy'))
+        else:
+            paths = glob.glob(os.path.join(folder, f'*{file}*.npy'))
 
-        paths = glob.glob(os.path.join(folder, f'*{file}*.npy'))
         paths = sorted(paths)  # sort paths to ensure correct order, otherwise labels & test files are mismatched
         if self.k >= 0 and len(paths) > 1:
             if self.k >= len(paths):
@@ -89,7 +97,12 @@ class MyDataset(Dataset):
         ts_lengths = [np.load(p).shape[0] for p in paths]
 
         if type == 'test':
-            l_paths = glob.glob(os.path.join(folder, f'*{labelfile}*.npy'))
+            if self.less and self.data_name in file_prefixes.keys() and isinstance(file_prefixes[self.data_name], list):
+                l_paths = []
+                for l in labelfile_complete:
+                    l_paths.append(glob.glob(os.path.join(folder, f'*{l}*.npy'))[0])
+            else:
+                l_paths = glob.glob(os.path.join(folder, f'*{labelfile}*.npy'))
             labels = np.concatenate([np.load(p) for p in l_paths])
 
         if self.feats > 0:
@@ -106,7 +119,7 @@ class MyDataset(Dataset):
             ts_lengths = [data.shape[0]]
             if type == 'test':  
                 labels = labels[:50000]
-
+        
         # 5-fold cross validation
         if not kfold and self.k >= 0 and len(paths) == 1:
             n = data.shape[0] // 5
@@ -244,11 +257,11 @@ class MyDataset(Dataset):
 
 
 if __name__ == '__main__':
-    dataset = 'UCR'
+    dataset = 'SMD'
     # Create dataset
-    train = MyDataset(dataset, window_size=10, step_size=1, modelname='iTransformer', flag='train', feats=30, less=False, enc=False, k=4)
-    valid = MyDataset(dataset, window_size=10, step_size=1, modelname='iTransformer', flag='valid', feats=30, less=False, enc=False, k=4)
-    test = MyDataset(dataset, window_size=10, step_size=1, modelname='iTransformer', flag='test', feats=30, less=False, enc=False, k=-1)
+    train = MyDataset(dataset, window_size=10, step_size=1, modelname='iTransformer', flag='train', feats=30, less=True, enc=False, k=4)
+    valid = MyDataset(dataset, window_size=10, step_size=1, modelname='iTransformer', flag='valid', feats=30, less=True, enc=False, k=4)
+    test = MyDataset(dataset, window_size=10, step_size=1, modelname='iTransformer', flag='test', feats=30, less=True, enc=False, k=-1)
     print(train.__len__(), train.data.shape, train.complete_data.shape)
     print(valid.__len__(), valid.data.shape)
     print(train.get_ts_lengths(), valid.get_ts_lengths())

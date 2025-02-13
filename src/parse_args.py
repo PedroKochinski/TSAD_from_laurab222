@@ -1,8 +1,7 @@
 import argparse
-from typing import Optional
 
 def parse_arguments() -> argparse.Namespace:
-	parser = argparse.ArgumentParser(description='Time-Series Anomaly Detection')
+	parser = argparse.ArgumentParser(description='Time Series Anomaly Detection')
 	
 	# Dataset and model arguments
 	parser.add_argument('--dataset', metavar='-d', type=str, required=False, default='SMAP_new', help="dataset from ['synthetic', 'SMD']")
@@ -24,9 +23,10 @@ def parse_arguments() -> argparse.Namespace:
 	parser.add_argument('--prob', action='store_true', help="model gives back probabilistic output")
 	parser.add_argument('--weighted', action='store_true', help="use weighted loss over time stamps in a window")
 	parser.add_argument('--enc', action='store_true', help="use additional time encoder covariate")
+	parser.add_argument('--shuffle', action='store_true', help="shuffle the train/valid data")
 	
 	# Miscellaneous
-	parser.add_argument('--name', type=str, required=False, default=None, help="name of the result folder")
+	parser.add_argument('--name', type=str, required=False, default=None, help="name of the output folder")
 	parser.add_argument('--f', default=None, help='dummy argument for jupyter notebooks')
 	
 	return parser.parse_args()

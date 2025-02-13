@@ -43,30 +43,13 @@ def normalize3(a, min_a = 0, max_a = 1):  # min_a = None, max_a = None
 	return (a - min_a) / (max_a - min_a + 0.0001), min_a, max_a
 
 def convertNumpy(df):
-	# x = df[df.columns[3:]].values[::10, :]
-	x = df[df.columns[3:]]  # want to keep all values and not filter out 1/10
+	x = df.drop(columns=['Row', 'Time', 'Date']).values[::10, :]  # downsampling, only keep 1/10 of data
 	return (x - x.min(0)) / (x.ptp(0) + 1e-4)
 
 def load_data(dataset):
 	folder = os.path.join(output_folder, dataset)
 	os.makedirs(folder, exist_ok=True)
-	if dataset == 'synthetic':
-		train_file = os.path.join(data_folder, dataset, 'synthetic_data_with_anomaly-s-1.csv')
-		test_labels = os.path.join(data_folder, dataset, 'test_anomaly.csv')
-		dat = pd.read_csv(train_file, header=None)
-		split = 10000
-		train = normalize(dat.values[:, :split].reshape(split, -1))
-		test = normalize(dat.values[:, split:].reshape(split, -1))
-		lab = pd.read_csv(test_labels, header=None)
-		lab[0] -= split
-		labels = np.zeros(test.shape)
-		for i in range(lab.shape[0]):
-			point = lab.values[i][0]
-			labels[point-30:point+30, lab.values[i][1:]] = 1
-		test += labels * np.random.normal(0.75, 0.1, test.shape)
-		for file in ['train', 'test', 'labels']:
-			np.save(os.path.join(folder, f'{file}.npy'), eval(file))
-	elif dataset == 'SMD':
+	if dataset == 'SMD':
 		dataset_folder = 'data/SMD'
 		file_list = os.listdir(os.path.join(dataset_folder, "train"))
 		for filename in file_list:
@@ -93,27 +76,6 @@ def load_data(dataset):
 			train, test, labels = train.reshape(-1, 1), test.reshape(-1, 1), labels.reshape(-1, 1)
 			for file in ['train', 'test', 'labels']:
 				np.save(os.path.join(folder, f'{dnum}_{file}.npy'), eval(file))
-	elif dataset == 'NAB':
-		dataset_folder = 'data/NAB'
-		file_list = os.listdir(dataset_folder)
-		with open(dataset_folder + '/labels.json') as f:
-			labeldict = json.load(f)
-		for filename in file_list:
-			if not filename.endswith('.csv'): continue
-			df = pd.read_csv(dataset_folder+'/'+filename)
-			vals = df.values[:,1]
-			labels = np.zeros_like(vals, dtype=np.float64)
-			for timestamp in labeldict['realKnownCause/'+filename]:
-				tstamp = timestamp.replace('.000000', '')
-				index = np.where(((df['timestamp'] == tstamp).values + 0) == 1)[0][0]
-				labels[index-4:index+4] = 1
-			min_temp, max_temp = np.min(vals), np.max(vals)
-			vals = (vals - min_temp) / (max_temp - min_temp)
-			train, test = vals.astype(float), vals.astype(float)
-			train, test, labels = train.reshape(-1, 1), test.reshape(-1, 1), labels.reshape(-1, 1)
-			fn = filename.replace('.csv', '')
-			for file in ['train', 'test', 'labels']:
-				np.save(os.path.join(folder, f'{fn}_{file}.npy'), eval(file))
 	elif dataset == 'MSDS':
 		dataset_folder = 'data/MSDS'
 		df_train = pd.read_csv(os.path.join(dataset_folder, 'train.csv'))
@@ -126,14 +88,41 @@ def load_data(dataset):
 		labels = labels.values[::1, 1:]
 		for file in ['train', 'test', 'labels']:
 			np.save(os.path.join(folder, f'{file}.npy'), eval(file).astype('float64'))
-	elif dataset == 'SWaT':
-		dataset_folder = 'data/SWaT'
+	elif dataset == 'SWaT_1D':
+		dataset_folder = 'data/SWaT_1D'
 		file = os.path.join(dataset_folder, 'series.json')
 		df_train = pd.read_json(file, lines=True)[['val']][3000:6000]
 		df_test  = pd.read_json(file, lines=True)[['val']][7000:12000]
 		train, min_a, max_a = normalize2(df_train.values)
 		test, _, _ = normalize2(df_test.values, min_a, max_a)
 		labels = pd.read_json(file, lines=True)[['noti']][7000:12000] + 0
+		for file in ['train', 'test', 'labels']:
+			np.save(os.path.join(folder, f'{file}.npy'), eval(file))
+	elif dataset == 'SWaT':
+		dataset_folder = 'data/SWaT/'
+		ls = pd.read_csv(os.path.join(dataset_folder, 'WADI_attacklabels.csv'))
+		train = pd.read_csv(os.path.join(dataset_folder, 'WADI_14days.csv'), skiprows=1000, nrows=2e5)
+		test = pd.read_csv(os.path.join(dataset_folder, 'WADI_attackdata.csv'))
+		train.dropna(how='all', inplace=True); test.dropna(how='all', inplace=True)
+		train.fillna(0, inplace=True); test.fillna(0, inplace=True)
+		test['Time'] = test['Time'].astype(str)
+		test['Time'] = pd.to_datetime(test['Date'] + ' ' + test['Time'])
+		labels = test.copy(deep = True)
+		for i in test.columns.tolist()[3:]: labels[i] = 0
+		for i in ['Start Time', 'End Time']: 
+			ls[i] = ls[i].astype(str)
+			ls[i] = pd.to_datetime(ls['Date'] + ' ' + ls[i])
+		for index, row in ls.iterrows():
+			to_match = row['Affected'].split(', ')
+			matched = []
+			for i in test.columns.tolist()[3:]:
+				for tm in to_match:
+					if tm in i: 
+						matched.append(i); break			
+			st, et = str(row['Start Time']), str(row['End Time'])
+			labels.loc[(labels['Time'] >= st) & (labels['Time'] <= et), matched] = 1
+		train, test, labels = convertNumpy(train), convertNumpy(test), convertNumpy(labels)
+		print(train.shape, test.shape, labels.shape)
 		for file in ['train', 'test', 'labels']:
 			np.save(os.path.join(folder, f'{file}.npy'), eval(file))
 	elif dataset in ['SMAP', 'MSL']:
@@ -157,29 +146,17 @@ def load_data(dataset):
 				labels[indices[i]:indices[i+1], :] = 1
 			np.save(f'{folder}/{fn}_labels.npy', labels)
 	elif dataset == 'WADI':
-		dataset_folder = 'data/WADI'
-		ls = pd.read_csv(os.path.join(dataset_folder, 'WADI_attacklabels.csv'))
-		train = pd.read_csv(os.path.join(dataset_folder, 'WADI_14days.csv'), skiprows=1000, nrows=2e5)
-		test = pd.read_csv(os.path.join(dataset_folder, 'WADI_attackdata.csv'))
+		dataset_folder = 'data/WADI/WADI.A2_19Nov2019'  # use version A2 where unstable period is removed
+		train = pd.read_csv(os.path.join(dataset_folder, 'WADI_14days_new.csv'))
+		test = pd.read_csv(os.path.join(dataset_folder, 'WADI_attackdataLABLE.csv'))
 		train.dropna(how='all', inplace=True); test.dropna(how='all', inplace=True)
 		train.fillna(0, inplace=True); test.fillna(0, inplace=True)
-		test['Time'] = test['Time'].astype(str)
-		test['Time'] = pd.to_datetime(test['Date'] + ' ' + test['Time'])
-		labels = test.copy(deep = True)
-		for i in test.columns.tolist()[3:]: labels[i] = 0
-		for i in ['Start Time', 'End Time']: 
-			ls[i] = ls[i].astype(str)
-			ls[i] = pd.to_datetime(ls['Date'] + ' ' + ls[i])
-		for index, row in ls.iterrows():
-			to_match = row['Affected'].split(', ')
-			matched = []
-			for i in test.columns.tolist()[3:]:
-				for tm in to_match:
-					if tm in i: 
-						matched.append(i); break			
-			st, et = str(row['Start Time']), str(row['End Time'])
-			labels.loc[(labels['Time'] >= st) & (labels['Time'] <= et), matched] = 1
-		train, test, labels = convertNumpy(train), convertNumpy(test), convertNumpy(labels)
+		labels = test["AttackLABLE (1:No Attack, -1:Attack)"]
+		test = test.drop(columns=["AttackLABLE (1:No Attack, -1:Attack)"])
+		train, test = convertNumpy(train), convertNumpy(test)
+		labels = labels.values  # 1 for normal, -1 for attack, but want 0 for normal, 1 for attack
+		labels = (1 - labels) / 2
+		labels = labels[::10]  # downsampling, only keep 1/10 of data
 		print(train.shape, test.shape, labels.shape)
 		for file in ['train', 'test', 'labels']:
 			np.save(os.path.join(folder, f'{file}.npy'), eval(file))
