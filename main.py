@@ -18,7 +18,7 @@ from src.data_loader import MyDataset
 
 
 def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc_feats=0, prob=False, pred=False):
-	l = nn.MSELoss(reduction = 'mean' if training else 'none')
+	
 	if 'DAGMM' in model.name:
 		l = nn.MSELoss(reduction = 'none')
 		compute = ComputeLoss(model, 0.1, 0.005, 'cpu', model.n_gmm)
@@ -269,7 +269,8 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 			else:
 				return loss.detach().numpy()
 	elif 'iTransformer' in model.name:
-		l = nn.MSELoss(reduction = 'none')
+		# l = nn.MSELoss(reduction = 'none')
+		l = nn.HuberLoss(reduction = 'none')
 		n = epoch + 1
 		if model.weighted:
 			mid = model.n_window % 2
@@ -315,6 +316,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 			scheduler.step()
 			return np.mean(l1s), optimizer.param_groups[0]['lr']
 		else:
+			l = nn.MSELoss(reduction = 'none')
 			z_all = torch.empty(0)
 			if model.weighted:
 				# loss = torch.zeros(size=(model.batch * model.n_window, feats))
