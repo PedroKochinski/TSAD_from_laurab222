@@ -10,8 +10,8 @@ from torchinfo import summary
 from src.models import *
 from src.constants import *
 from src.plotting import *
-from src.pot import *
-from src.utils import load_model, save_model
+from src.pot import SPOT
+from src.utils import load_model, save_model, EarlyStopper
 from src.diagnosis import *
 from src.merlin import *
 from src.data_loader import MyDataset
@@ -269,6 +269,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 			else:
 				return loss.detach().numpy()
 	elif 'iTransformer' in model.name:
+		# l = combined_loss(model.n_window)
 		# l = nn.MSELoss(reduction = 'none')
 		l = nn.HuberLoss(reduction = 'none')
 		n = epoch + 1
@@ -288,8 +289,6 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 				else:
 					d_enc = None
 				# don't invert d because we have permutation later in DataEmbedding_inverted as part of model
-				# if epoch == 0 and l1s == []: 
-				# 	summary(model, input_data=d, depth=5, verbose=1)
 				if model.output_attention:
 					z = model(d, d_enc)[0]
 				else:
@@ -316,7 +315,6 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 			scheduler.step()
 			return np.mean(l1s), optimizer.param_groups[0]['lr']
 		else:
-			l = nn.MSELoss(reduction = 'none')
 			z_all = torch.empty(0)
 			if model.weighted:
 				# loss = torch.zeros(size=(model.batch * model.n_window, feats))
@@ -365,11 +363,13 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 			# 	z_std = torch.exp(z_logsigma)
 			# 	loss = loss / z_std  #+ z_std
 			if pred:
-				z_all = z_all.view(-1, feats)
+				# z_all, _, _ = torch.split(z_all, model.n_window, dim=1)
+				z_all = z_all.reshape(-1, feats)
 				return loss.detach().numpy(), z_all.detach().numpy() # because we have unnecessary third dimension
 			else:
 				return loss.detach().numpy()
 	elif 'LSTM_AE' in model.name:
+		l = nn.MSELoss(reduction = 'none')
 		bs = model.batch # if training else len(data)
 		n = epoch + 1
 		if training:
@@ -487,11 +487,10 @@ if __name__ == '__main__':
 	enc_feats = train.enc_feats
 	
 	if args.model in ['MERLIN']:
-		eval(f'run_{args.model.lower()}(test_loader, labels, args.dataset)')
-	model, optimizer, scheduler, epoch, accuracy_list = load_model(args.model, feats, args.n_window, args.step_size, checkpoints_path, args.prob, args.weighted)
-
-	# print(model.transformer_encoder.layers[0].self_attn.in_proj_weight)
-	# print(model.transformer_encoder.layers[0].self_attn.in_proj_bias)
+		data_loader_test = DataLoader(test, batch_size=24, shuffle=False)
+		eval(f'run_{args.model.lower()}(data_loader_test, labels, args.dataset)')
+	model, optimizer, scheduler, epoch, accuracy_list = \
+		load_model(args.model, feats, args.n_window, args.step_size, checkpoints_path, args.prob, args.weighted)
 
 	# Calculate and print the number of parameters
 	total_params = sum(p.numel() for p in model.parameters())
@@ -500,7 +499,8 @@ if __name__ == '__main__':
 
 	# Create data loader
 	data_loader_train = DataLoader(train, batch_size=model.batch, shuffle=False)
-	data_loader_test = DataLoader(test, batch_size=model.batch, shuffle=False)
+	if args.model not in ['MERLIN']:
+		data_loader_test = DataLoader(test, batch_size=model.batch, shuffle=False)
 	data_loader_train_test = DataLoader(train_test, batch_size=model.batch, shuffle=False)
 	if args.k > 0:
 		data_loader_valid = DataLoader(valid, batch_size=model.batch, shuffle=False)

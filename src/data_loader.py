@@ -115,10 +115,10 @@ class MyDataset(Dataset):
             self.feats = data.shape[1] - self.enc_feats
 
         if self.less and self.data_name not in file_prefixes.keys():
-            data = data[:50000]
+            data = data[:5000]
             ts_lengths = [data.shape[0]]
             if type == 'test':  
-                labels = labels[:50000]
+                labels = labels[:5000]
         
         # 5-fold cross validation
         if not kfold and self.k >= 0 and len(paths) == 1:
@@ -154,7 +154,7 @@ class MyDataset(Dataset):
         paths = glob.glob(os.path.join(folder, f'*{file}*.npy'))
         paths = sorted(paths)  # sort paths to ensure correct order, otherwise labels & test files are mismatched
         if self.less and type == 'train':
-            paths = paths[:5]
+            paths = paths[:20]
         data = np.concatenate([np.load(p) for p in paths])
         ts_lengths = [np.load(p).shape[0] for p in paths]
         
@@ -216,7 +216,7 @@ class MyDataset(Dataset):
             for i, g in enumerate(data): 
                 if i >= self.window_size: w = data[i-self.window_size:i]
                 else: w = np.concatenate([data[:1].repeat(self.window_size-i, 0), data[0:i]])
-                windows.append(w if self.modelname in ['TranAD', 'Attention', 'iTransformer', 'LSTM_AE'] else w.view(-1))
+                windows.append(w if self.modelname in ['TranAD', 'Attention', 'iTransformer', 'LSTM_AE'] else w.reshape(-1))
             windows = np.stack(windows)
             self.data = windows
 

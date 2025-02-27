@@ -42,8 +42,11 @@ def normalize3(a, min_a = 0, max_a = 1):  # min_a = None, max_a = None
 	if min_a is None: min_a, max_a = np.min(a, axis = 0), np.max(a, axis = 0)
 	return (a - min_a) / (max_a - min_a + 0.0001), min_a, max_a
 
-def convertNumpy(df):
-	x = df.drop(columns=['Row', 'Time', 'Date']).values[::10, :]  # downsampling, only keep 1/10 of data
+def convertNumpy(df, data=None):
+	if data == 'WADI':
+		x = df.drop(columns=['Row', 'Time', 'Date']).values[::10, :]  # downsampling, only keep 1/10 of data
+	else:
+		x = df.values
 	return (x - x.min(0)) / (x.ptp(0) + 1e-4)
 
 def load_data(dataset):
@@ -88,43 +91,6 @@ def load_data(dataset):
 		labels = labels.values[::1, 1:]
 		for file in ['train', 'test', 'labels']:
 			np.save(os.path.join(folder, f'{file}.npy'), eval(file).astype('float64'))
-	elif dataset == 'SWaT_1D':
-		dataset_folder = 'data/SWaT_1D'
-		file = os.path.join(dataset_folder, 'series.json')
-		df_train = pd.read_json(file, lines=True)[['val']][3000:6000]
-		df_test  = pd.read_json(file, lines=True)[['val']][7000:12000]
-		train, min_a, max_a = normalize2(df_train.values)
-		test, _, _ = normalize2(df_test.values, min_a, max_a)
-		labels = pd.read_json(file, lines=True)[['noti']][7000:12000] + 0
-		for file in ['train', 'test', 'labels']:
-			np.save(os.path.join(folder, f'{file}.npy'), eval(file))
-	elif dataset == 'SWaT':
-		dataset_folder = 'data/SWaT/'
-		ls = pd.read_csv(os.path.join(dataset_folder, 'WADI_attacklabels.csv'))
-		train = pd.read_csv(os.path.join(dataset_folder, 'WADI_14days.csv'), skiprows=1000, nrows=2e5)
-		test = pd.read_csv(os.path.join(dataset_folder, 'WADI_attackdata.csv'))
-		train.dropna(how='all', inplace=True); test.dropna(how='all', inplace=True)
-		train.fillna(0, inplace=True); test.fillna(0, inplace=True)
-		test['Time'] = test['Time'].astype(str)
-		test['Time'] = pd.to_datetime(test['Date'] + ' ' + test['Time'])
-		labels = test.copy(deep = True)
-		for i in test.columns.tolist()[3:]: labels[i] = 0
-		for i in ['Start Time', 'End Time']: 
-			ls[i] = ls[i].astype(str)
-			ls[i] = pd.to_datetime(ls['Date'] + ' ' + ls[i])
-		for index, row in ls.iterrows():
-			to_match = row['Affected'].split(', ')
-			matched = []
-			for i in test.columns.tolist()[3:]:
-				for tm in to_match:
-					if tm in i: 
-						matched.append(i); break			
-			st, et = str(row['Start Time']), str(row['End Time'])
-			labels.loc[(labels['Time'] >= st) & (labels['Time'] <= et), matched] = 1
-		train, test, labels = convertNumpy(train), convertNumpy(test), convertNumpy(labels)
-		print(train.shape, test.shape, labels.shape)
-		for file in ['train', 'test', 'labels']:
-			np.save(os.path.join(folder, f'{file}.npy'), eval(file))
 	elif dataset in ['SMAP', 'MSL']:
 		dataset_folder = 'data/SMAP_MSL'
 		file = os.path.join(dataset_folder, 'labeled_anomalies.csv')
@@ -145,6 +111,30 @@ def load_data(dataset):
 			for i in range(0, len(indices), 2):
 				labels[indices[i]:indices[i+1], :] = 1
 			np.save(f'{folder}/{fn}_labels.npy', labels)
+	elif dataset == 'SWaT_1D':
+		dataset_folder = 'data/SWaT_1D'
+		file = os.path.join(dataset_folder, 'series.json')
+		df_train = pd.read_json(file, lines=True)[['val']][3000:6000]
+		df_test  = pd.read_json(file, lines=True)[['val']][7000:12000]
+		train, min_a, max_a = normalize2(df_train.values)
+		test, _, _ = normalize2(df_test.values, min_a, max_a)
+		labels = pd.read_json(file, lines=True)[['noti']][7000:12000] + 0
+		for file in ['train', 'test', 'labels']:
+			np.save(os.path.join(folder, f'{file}.npy'), eval(file))
+	elif dataset == 'SWaT':
+		dataset_folder = 'data/SWaT'
+		train = pd.read_csv(os.path.join(dataset_folder, 'SWaT_Dataset_Normal_v1.csv'), delimiter=';', decimal=',')
+		test = pd.read_csv(os.path.join(dataset_folder, 'SWaT_Dataset_Attack_v0.csv'), delimiter=';', decimal=',')
+		train.dropna(how='all', inplace=True); test.dropna(how='all', inplace=True)
+		train.fillna(0, inplace=True); test.fillna(0, inplace=True)
+		labels = test['Normal/Attack']
+		labels = (labels == 'Attack').astype(int)
+		train = train.drop(columns=['Normal/Attack', 'Timestamp'])  # are all 'Normal' anyways
+		test = test.drop(columns=['Normal/Attack', 'Timestamp'])
+		train, test = convertNumpy(train), convertNumpy(test)
+		print(train.shape, test.shape, labels.shape)
+		for file in ['train', 'test', 'labels']:
+			np.save(os.path.join(folder, f'{file}.npy'), eval(file))
 	elif dataset == 'WADI':
 		dataset_folder = 'data/WADI/WADI.A2_19Nov2019'  # use version A2 where unstable period is removed
 		train = pd.read_csv(os.path.join(dataset_folder, 'WADI_14days_new.csv'))
@@ -153,7 +143,7 @@ def load_data(dataset):
 		train.fillna(0, inplace=True); test.fillna(0, inplace=True)
 		labels = test["AttackLABLE (1:No Attack, -1:Attack)"]
 		test = test.drop(columns=["AttackLABLE (1:No Attack, -1:Attack)"])
-		train, test = convertNumpy(train), convertNumpy(test)
+		train, test = convertNumpy(train, data='WADI'), convertNumpy(test, data='WADI')
 		labels = labels.values  # 1 for normal, -1 for attack, but want 0 for normal, 1 for attack
 		labels = (1 - labels) / 2
 		labels = labels[::10]  # downsampling, only keep 1/10 of data

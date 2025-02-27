@@ -76,33 +76,48 @@
 #     # python main.py --model iTransformer --n_window 100 --dataset IEEECIS_new2.2 --step_size 50 --epochs 200 --retrain --feats 30 --k $i --name latent2_$i
 # done
 
-# for d in GECCO GECCO_normal UCR SWaT_1D creditcard_normal
+# for d in SMAP_new  # creditcard creditcard_normal # GECCO GECCO_normal # UCR SWaT_1D creditcard_normal SMAP_new creditcard
 # do
 #     echo "data set $d"
-#     for i in 1  # {1..5}
+#     for i in {1..5}
 #     do  
 #         echo "rep $i"
-#         # python main.py --model TranAD --n_window 10 --dataset $d --step_size 1 --epochs 5 --retrain --feats -1 --k $i --name Huber_$i
-#         python main.py --model iTransformer --n_window 10 --dataset $d --step_size 1 --epochs 5 --retrain --feats -1 --k $i --name latent2_Huber_$i 
-#         python main.py --model iTransformer --n_window 10 --dataset $d --step_size 5 --epochs 5 --retrain --feats -1 --k $i --name latent2_Huber_$i 
-#         python main.py --model iTransformer --n_window 100 --dataset $d --step_size 50 --epochs 5 --retrain --feats -1 --k $i --name latent2_Huber_$i 
-#         python main.py --model iTransformer --n_window 100 --dataset $d --step_size 10 --epochs 5 --retrain --feats -1 --k $i --name latent2_Huber_$i 
+#         # python main.py --model TranAD --n_window 10 --dataset $d --step_size 1 --epochs 5 --retrain --feats -1 --k $i --name $i
+#         python main.py --model iTransformer --n_window 10 --dataset $d --step_size 1 --epochs 5 --retrain --feats -1 --k $i --name latent2_Huber_$i --less
+#         python main.py --model iTransformer --n_window 10 --dataset $d --step_size 5 --epochs 5 --retrain --feats -1 --k $i --name latent2_Huber_$i --less
+#         python main.py --model iTransformer --n_window 100 --dataset $d --step_size 50 --epochs 5 --retrain --feats -1 --k $i --name latent2_Huber_$i --less
+#         python main.py --model iTransformer --n_window 100 --dataset $d --step_size 10 --epochs 5 --retrain --feats -1 --k $i --name latent2_Huber_$i --less
 #     done
 # done
 
-for d in GECCO GECCO_normal # UCR SWaT_1D creditcard_normal
+
+for d in creditcard # GECCO GECCO_normal creditcard_normal creditcard
 do
     echo "data set $d"
     for i in {1..5}
     do  
         echo "rep $i"
-        # python main.py --model TranAD --n_window 10 --dataset $d --step_size 1 --epochs 5 --retrain --feats -1 --k $i --name $i
-        python main.py --model iTransformer --n_window 10 --dataset $d --step_size 1 --epochs 5 --retrain --feats -1 --k $i --name latent2_mixed_$i 
-        python main.py --model iTransformer --n_window 10 --dataset $d --step_size 5 --epochs 5 --retrain --feats -1 --k $i --name latent2_mixed_$i 
-        python main.py --model iTransformer --n_window 100 --dataset $d --step_size 50 --epochs 5 --retrain --feats -1 --k $i --name latent2_mixed_$i 
-        python main.py --model iTransformer --n_window 100 --dataset $d --step_size 10 --epochs 5 --retrain --feats -1 --k $i --name latent2_mixed_$i 
+        # python main.py --model TranAD --n_window 10 --dataset $d --step_size 1 --epochs 5 --retrain --feats -1 --k $i --name newloss3_$i
+        python main.py --model iTransformer --n_window 10 --dataset $d --step_size 1 --epochs 5 --retrain --feats -1 --k $i --name latent2_Huber_$i  --less
+        python main.py --model iTransformer --n_window 10 --dataset $d --step_size 5 --epochs 5 --retrain --feats -1 --k $i --name latent2_Huber_$i --less
+        python main.py --model iTransformer --n_window 100 --dataset $d --step_size 50 --epochs 5 --retrain --feats -1 --k $i --name latent2_Huber_$i --less
+        python main.py --model iTransformer --n_window 100 --dataset $d --step_size 10 --epochs 5 --retrain --feats -1 --k $i --name latent2_Huber_$i --less
     done
 done
+
+# for d in creditcard  # GECCO GECCO_normal # UCR SWaT_1D creditcard_normal SMAP_new creditcard
+# do
+#     echo "data set $d"
+#     for i in {1..5}
+#     do  
+#         echo "rep $i"
+#         # python main.py --model TranAD --n_window 10 --dataset $d --step_size 1 --epochs 5 --retrain --feats -1 --k $i --name $i
+#         python main.py --model iTransformer --n_window 10 --dataset $d --step_size 1 --epochs 5 --retrain --feats -1 --k $i --name latent2_$i 
+#         python main.py --model iTransformer --n_window 10 --dataset $d --step_size 5 --epochs 5 --retrain --feats -1 --k $i --name latent2_$i 
+#         python main.py --model iTransformer --n_window 100 --dataset $d --step_size 50 --epochs 5 --retrain --feats -1 --k $i --name latent2_$i 
+#         python main.py --model iTransformer --n_window 100 --dataset $d --step_size 10 --epochs 5 --retrain --feats -1 --k $i --name latent2_$i 
+#     done
+# done
 
 # for d in SMD # SWaT UCR GECCO ATLAS_TS SMD MSL_new
 # do
@@ -131,6 +146,8 @@ done
 # python main.py --model TranAD --n_window 10 --dataset creditcard_normal --step_size 1 --epochs 5 --retrain --feats -1 --k -1 --name test
 # python main.py --model iTransformer --n_window 10 --dataset WADI --step_size 1 --epochs 5 --retrain --feats 30 --k -1 --name latent2_test
 # python main.py --model iTransformer --n_window 100 --dataset WADI --step_size 50 --epochs 5 --retrain --feats 30 --k -1 --name latent2_test
+# python main.py --model iTransformer --n_window 10 --dataset SWaT --step_size 1 --epochs 5 --retrain --feats 30 --k -1 --name latent2_test
+# python main.py --model iTransformer --n_window 100 --dataset SWaT --step_size 50 --epochs 5 --retrain --feats 30 --k -1 --name latent2_test
 
 # python main.py --model iTransformer --n_window 2000 --dataset ATLAS_DQM_TS --retrain --step_size 1000 --feats -1 --name train_all
 # python main.py --model iTransformer --n_window 1000 --dataset WADI --retrain --step_size 500 --feats -1 --name latent2_1 --k 1

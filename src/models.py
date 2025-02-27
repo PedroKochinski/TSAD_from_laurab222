@@ -594,7 +594,7 @@ class iTransformer(nn.Module):
 		self.n = self.n_feats * self.n_window
 		self.seq_len = self.n_window
 		self.label_len = self.n_window
-		self.pred_len = self.n_window
+		self.pred_len = self.n_window  # or 3* if new loss
 		self.output_attention = False
 		self.use_norm = True
 		self.d_model = 2  # int(self.n_window / 2) # * feats  # 512
@@ -801,3 +801,36 @@ class iTransformer_dec(nn.Module):
 
 		dec_out = self.forecast(src, src_mark_enc)  # [B, L, N]
 		return dec_out
+	
+
+def loss_quantile(output, target, quantile):
+	z = target - output
+	loss = torch.where(z < 0, quantile * z, (quantile - 1) * z)
+	return loss
+
+
+# def combined_loss():  # new loss based on CMS paper for bjets, need 3 outputs of model, one for mean estimator, one for quantile 0.25 and one for quantile 0.75 estimator
+# 	def loss(output, target):
+# 		output1, output2, output3 = torch.split(output, 10, dim=1)
+# 		loss_Huber = torch.nn.HuberLoss(reduction='none')
+# 		loss_tot = loss_Huber(output1, target) + loss_quantile(output2, target, quantile=0.25) + loss_quantile(output3, target, quantile=0.75)
+# 		return loss_tot
+# 	return loss
+
+
+class combined_loss(nn.Module):
+	def __init__(self, window_size):
+		super(combined_loss, self).__init__()
+		self.window_size = window_size
+	
+	def forward(self, output, target):
+		output1, output2, output3 = torch.split(output, self.window_size, dim=1)
+		loss_Huber = torch.nn.HuberLoss(reduction='none')
+		huber = loss_Huber(output1, target)
+		quantile1 = loss_quantile(output2, target, quantile=0.25)
+		quantile2 = loss_quantile(output3, target, quantile=0.75)
+		penalty = torch.log( abs(output3 - output2) + 1e-4 )
+		loss_tot = huber + quantile1 + quantile2 - 0.01*penalty
+		# loss_tot = loss_Huber(output1, target) + loss_quantile(output2, target, quantile=0.25) + loss_quantile(output3, target, quantile=0.75) - 0.1* torch.log( torch.abs(output3 - output2) + 0.1 )
+		# print('huber:', huber.mean(), 'quantile1:', quantile1.mean(), 'quantile2:', quantile2.mean(), 'penalty:', 0.05*penalty.mean())
+		return loss_tot
