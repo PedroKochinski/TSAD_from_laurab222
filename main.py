@@ -22,7 +22,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 	if 'DAGMM' in model.name:
 		l = nn.MSELoss(reduction = 'none')
 		compute = ComputeLoss(model, 0.1, 0.005, 'cpu', model.n_gmm)
-		n = epoch + 1; w_size = model.n_window
+		n = epoch + 1; w_size = model.window_size
 		l1s = []; l2s = []
 		if training:
 			for d in data:
@@ -50,7 +50,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 				return loss.detach().numpy()
 	if 'Attention' in model.name:
 		l = nn.MSELoss(reduction = 'none')
-		n = epoch + 1; w_size = model.n_window
+		n = epoch + 1; w_size = model.window_size
 		l1s = []; res = []
 		if training:
 			for d in data:
@@ -106,7 +106,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 				return loss.detach().numpy()
 	elif 'USAD' in model.name:
 		l = nn.MSELoss(reduction = 'none')
-		n = epoch + 1; w_size = model.n_window
+		n = epoch + 1; w_size = model.window_size
 		l1s, l2s = [], []
 		if training:
 			for d in data:
@@ -136,7 +136,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 				return loss.detach().numpy()
 	elif model.name in ['GDN', 'MTAD_GAT', 'MSCRED', 'CAE_M']:
 		l = nn.MSELoss(reduction = 'none')
-		n = epoch + 1; w_size = model.n_window
+		n = epoch + 1; w_size = model.window_size
 		l1s = []
 		if training:
 			for i, d in enumerate(data):
@@ -173,7 +173,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 		msel = nn.MSELoss(reduction = 'mean')
 		real_label, fake_label = torch.tensor([0.9]), torch.tensor([0.1]) # label smoothing
 		real_label, fake_label = real_label.type(torch.DoubleTensor), fake_label.type(torch.DoubleTensor)
-		n = epoch + 1; w_size = model.n_window
+		n = epoch + 1; w_size = model.window_size
 		mses, gls, dls = [], [], []
 		if training:
 			for d in data:
@@ -272,18 +272,18 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 		l = nn.MSELoss(reduction = 'none')
 		n = epoch + 1
 		if model.weighted:
-			mid = model.n_window % 2
-			middle = math.floor(model.n_window / 2)
+			mid = model.window_size % 2
+			middle = math.floor(model.window_size / 2)
 			weights = [i + 1 for i in range(middle)] + mid * [middle+1] + [i for i in range(middle, 0, -1)]
 			weights /= np.sum(weights)
 			weights = torch.tensor(weights).view(-1,1).double()
 		if training:
 			l1s = []
-			for d in data: # d.shape is [B, n_window, N] or d = (dx, dy)
+			for d in data: # d.shape is [B, window_size, N] or d = (dx, dy)
 				# local_bs = d.shape[0]
 				if model.forecasting:	
 					elem = d[1][:, -1, :].view(-1, 1, feats)  # [B, 1, N]
-					d = d[0]								  # [B, n_window, N]
+					d = d[0]								  # [B, window_size, N]
 				else:
 					elem = d
 				if enc_feats > 0:
@@ -322,16 +322,16 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 		else:
 			z_all = torch.empty(0)
 			if model.weighted:
-				# loss = torch.zeros(size=(model.batch * model.n_window, feats))
+				# loss = torch.zeros(size=(model.batch * model.window_size, feats))
 				# new test: get loss according to position in window
-				loss = torch.zeros(size=(model.n_window, feats))
+				loss = torch.zeros(size=(model.window_size, feats))
 			else:
 				loss = torch.empty(0)
-			for i, d in enumerate(data): # d.shape is [B, n_window, N]
+			for i, d in enumerate(data): # d.shape is [B, window_size, N]
 				# local_bs = d.shape[0]
 				if model.forecasting:	
 					elem = d[1][:, -1, :].view(-1, 1, feats)  # [B, 1, N]
-					d = d[0]								  # [B, n_window, N]
+					d = d[0]								  # [B, window_size, N]
 				else:
 					elem = d
 				if enc_feats > 0:
@@ -355,7 +355,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 					# idx = i * local_bs * model.test_step_size
 					# for j in range(local_bs):
 					# 	start = idx +  j*model.test_step_size
-					# 	stop = start + model.n_window	
+					# 	stop = start + model.window_size	
 					# 	loss[start:stop] += l1_weighted[j]
 					# print(start, stop, idx)
 					# new test: get loss according to position in window
@@ -462,9 +462,9 @@ if __name__ == '__main__':
 
 	# define path for results, checkpoints & plots & create directories
 	if args.name:
-		folder = f'{args.model}/{args.model}_{args.dataset}/n_window{args.n_window}_steps{args.step_size}_feats{args.feats}_eps{args.epochs}_{args.name}'
+		folder = f'{args.model}_param_search/{args.model}_{args.dataset}/window{args.window_size}_steps{args.step_size}_dmodel{args.d_model}_feats{args.feats}_eps{args.epochs}/{args.name}'
 	else:
-		folder = f'{args.model}/{args.model}_{args.dataset}/n_window{args.n_window}_steps{args.step_size}_feats{args.feats}_eps{args.epochs}'
+		folder = f'{args.model}_param_search/{args.model}_{args.dataset}/window{args.window_size}_steps{args.step_size}_dmodel{args.d_model}_feats{args.feats}_eps{args.epochs}'
 	plot_path = f'{folder}/plots'
 	res_path = f'{folder}/results'
 	if args.checkpoint is None:
@@ -474,13 +474,13 @@ if __name__ == '__main__':
 	os.makedirs(plot_path, exist_ok=True)
 	os.makedirs(res_path, exist_ok=True)
 
-	train = MyDataset(args.dataset, args.n_window, args.step_size, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=args.k, forecasting=args.forecasting)
+	train = MyDataset(args.dataset, args.window_size, args.step_size, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=args.k, forecasting=args.forecasting)
 	if args.weighted or args.forecasting:
-		test = MyDataset(args.dataset, args.n_window, args.step_size, args.model, flag='test', feats=args.feats, less=args.less, enc=args.enc, k=-1, forecasting=args.forecasting)
-		train_test = MyDataset(args.dataset, args.n_window, args.step_size, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=-1, forecasting=args.forecasting)
+		test = MyDataset(args.dataset, args.window_size, args.step_size, args.model, flag='test', feats=args.feats, less=args.less, enc=args.enc, k=-1, forecasting=args.forecasting)
+		train_test = MyDataset(args.dataset, args.window_size, args.step_size, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=-1, forecasting=args.forecasting)
 	else:
-		test = MyDataset(args.dataset, args.n_window, args.n_window, args.model, flag='test', feats=args.feats, less=args.less, enc=args.enc, k=-1, forecasting=args.forecasting)
-		train_test = MyDataset(args.dataset, args.n_window, args.n_window, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=-1,forecasting=args.forecasting)
+		test = MyDataset(args.dataset, args.window_size, args.window_size, args.model, flag='test', feats=args.feats, less=args.less, enc=args.enc, k=-1, forecasting=args.forecasting)
+		train_test = MyDataset(args.dataset, args.window_size, args.window_size, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=-1,forecasting=args.forecasting)
 	labels = test.get_labels()
 	
 	print('train set', train.__len__(), train.data.shape)
@@ -488,7 +488,7 @@ if __name__ == '__main__':
 	print('labels', labels.shape)
 	
 	if args.k > 0:
-		valid = MyDataset(args.dataset, args.n_window, args.step_size, args.model, flag='valid', feats=args.feats, less=args.less, enc=args.enc, k=args.k, forecasting=args.forecasting)
+		valid = MyDataset(args.dataset, args.window_size, args.step_size, args.model, flag='valid', feats=args.feats, less=args.less, enc=args.enc, k=args.k, forecasting=args.forecasting)
 		print(f'{args.k}-fold valid set', valid.__len__(), valid.data.shape)
 
 	feats = train.feats
@@ -496,10 +496,7 @@ if __name__ == '__main__':
 	
 	if args.model in ['MERLIN']:
 		eval(f'run_{args.model.lower()}(test_loader, labels, args.dataset)')
-	model, optimizer, scheduler, epoch, accuracy_list = load_model(args.model, feats, args.n_window, args.step_size, checkpoints_path, args.prob, args.weighted, forecasting=args.forecasting)
-
-	# print(model.transformer_encoder.layers[0].self_attn.in_proj_weight)
-	# print(model.transformer_encoder.layers[0].self_attn.in_proj_bias)
+	model, optimizer, scheduler, epoch, accuracy_list = load_model(args.model, feats, args.window_size, args.step_size, checkpoints_path, args.prob, args.weighted, forecasting=args.forecasting)
 
 	# Calculate and print the number of parameters
 	total_params = sum(p.numel() for p in model.parameters())
@@ -592,10 +589,10 @@ if __name__ == '__main__':
 	# 		ax = axs[dim]
 	# 	ax.plot(lossT[:, dim], '-o', label='train loss')
 	# 	ax.plot(loss[:, dim], '-o', label='test loss')
-	# 	if args.n_window > 20:
-	# 		ax.set_xticks(np.arange(0, args.n_window, 10))
+	# 	if args.window_size > 20:
+	# 		ax.set_xticks(np.arange(0, args.window_size, 10))
 	# 	else:
-	# 		ax.set_xticks(np.arange(0, args.n_window))
+	# 		ax.set_xticks(np.arange(0, args.window_size))
 	# 	ax.set_ylabel(f'Dim {dim}', rotation=0, ha='right', rotation_mode='default', labelpad=10)
 	# 	ax.legend(loc='upper right')
 	# if feats == 1:
@@ -605,7 +602,7 @@ if __name__ == '__main__':
 	# fig.subplots_adjust(hspace=0.2)  
 	# fig.align_ylabels(axs)
 	# plt.tight_layout()
-	# plt.savefig(f'studies_posinwindow/{args.model}_{args.dataset}_loss_posinw_window{args.n_window}.png', dpi=300)
+	# plt.savefig(f'studies_posinwindow/{args.model}_{args.dataset}_loss_posinw_window{args.window_size}.png', dpi=300)
 	# plt.close()
 
 	# # Plot average train and test loss over all dimensions
@@ -616,7 +613,7 @@ if __name__ == '__main__':
 	# plt.ylabel('Average loss across features')
 	# plt.legend(loc='upper right')
 	# plt.tight_layout()
-	# plt.savefig(f'studies_posinwindow/{args.model}_{args.dataset}_avgloss_posinw_window{args.n_window}.png', dpi=300)
+	# plt.savefig(f'studies_posinwindow/{args.model}_{args.dataset}_avgloss_posinw_window{args.window_size}.png', dpi=300)
 	# plt.close()
 	# print('plot saved')
 	# sys.exit()
@@ -660,8 +657,8 @@ if __name__ == '__main__':
 	# # if step_size > 1, define truth labels per window instead of per time stamp, can also just use non-overlapping windows for testing
 	# if args.step_size > 1:
 	# 	print(labels.shape, labels[labels[:,0]==1].shape, labels[labels[:,0]==0].shape)
-	# 	nb_windows = (len(labels) - args.n_window) // args.step_size
-	# 	labels = np.array([(np.sum(labels[i*args.step_size:i*args.step_size+args.n_window], axis=0) >= 1) + 0 for i in range(nb_windows)])
+	# 	nb_windows = (len(labels) - args.window_size) // args.step_size
+	# 	labels = np.array([(np.sum(labels[i*args.step_size:i*args.step_size+args.window_size], axis=0) >= 1) + 0 for i in range(nb_windows)])
 	# 	print(labels.shape, labels[labels[:,0]==1].shape, labels[labels[:,0]==0].shape)
 
 	### anomaly labels
@@ -711,7 +708,7 @@ if __name__ == '__main__':
 				plot_labels=['Local anomaly\n(inclusive OR)', 'Local anomaly\n(majority voting)', 'Global anomaly'], name='_all')
 	
 	if feats <= 40:
-		plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred, labels, name='_local')
+		plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred, labels, name='_local_or')
 		plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred_maj, labels, name='_local_maj')
 		plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred_glob, labels, name='_global')
 
@@ -724,7 +721,7 @@ if __name__ == '__main__':
 	result_local2.index = ['local_all_maj']
 	df_res_local = pd.concat([df_res_local, result_local1, result_local2])
 	df_res = pd.concat([df_res_local, df_res_global]) 
-	df_labels = pd.DataFrame( {'local': labelspred, 'local_maj': labelspred_maj, 'global': labelspred_glob} )
+	df_labels = pd.DataFrame( {'local_or': labelspred, 'local_maj': labelspred_maj, 'global': labelspred_glob} )
 
 	df_res.to_csv(f'{res_path}/res.csv')	
 	df_labels.to_csv(f'{res_path}/pred_labels.csv', index=False)

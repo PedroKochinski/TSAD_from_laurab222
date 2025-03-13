@@ -47,8 +47,8 @@ class Attention(nn.Module):
 		self.name = 'Attention'
 		self.lr = 0.0001
 		self.n_feats = feats
-		self.n_window = 5 # MHA w_size = 5
-		self.n = self.n_feats * self.n_window
+		self.window_size = 5 # MHA w_size = 5
+		self.n = self.n_feats * self.window_size
 		self.atts = [ nn.Sequential( nn.Linear(self.n, feats * feats), 
 				nn.ReLU(True))	for i in range(1)]
 		self.atts = nn.ModuleList(self.atts)
@@ -61,7 +61,7 @@ class Attention(nn.Module):
 
 ## LSTM_AD Model
 class LSTM_AD(nn.Module):
-	def __init__(self, feats, n_window=None, prob=False):
+	def __init__(self, feats, window_size=None, prob=False):
 		super(LSTM_AD, self).__init__()
 		self.name = 'LSTM_AD'
 		self.lr = 0.002
@@ -84,15 +84,15 @@ class LSTM_AD(nn.Module):
 	
 ## LSTM_AE Model (as done for Vilius' QT)
 class LSTM_AE(nn.Module):
-	def __init__(self, feats, n_window=None, prob=False):
+	def __init__(self, feats, window_size=None, prob=False):
 		super(LSTM_AE, self).__init__()
 		self.name = 'LSTM_AE'
 		self.lr = 0.002
 		self.batch = 100
 		self.n_feats = feats
 		self.n_hidden = 64
-		self.n_window = n_window
-		self.lstm = nn.LSTM(input_size=self.n_window, hidden_size=self.n_hidden, num_layers=1, batch_first=True)
+		self.window_size = window_size
+		self.lstm = nn.LSTM(input_size=self.window_size, hidden_size=self.n_hidden, num_layers=1, batch_first=True)
 		self.lstm2 = nn.LSTM(input_size=self.n_hidden, hidden_size=self.n_hidden, num_layers=1, batch_first=True)
 		self.fcn = nn.Linear(self.n_hidden, self.n_feats)
 
@@ -102,7 +102,7 @@ class LSTM_AE(nn.Module):
 		# for g in x:
 		# 	g.unsqueeze_(0)
 		# 	out1, (h1, c1) = self.lstm(g)
-		# 	latent = h1.repeat(self.n_window, 1, 1)
+		# 	latent = h1.repeat(self.window_size, 1, 1)
 		# 	latent = latent.swapdims(0, 1)
 		# 	out2, (h2, c2) = self.lstm2(latent)
 		# 	out2 = self.fcn(out2)
@@ -110,7 +110,7 @@ class LSTM_AE(nn.Module):
 		# 	outputs = torch.cat([outputs, out2], dim=0)
 		# x.unsqueeze_(0)
 		out1, (h1, c1) = self.lstm(x)
-		latent = h1.repeat(self.n_window, 1, 1)
+		latent = h1.repeat(self.window_size, 1, 1)
 		latent = latent.swapdims(0, 1)
 		out2, (h2, c2) = self.lstm2(latent)
 		out2 = self.fcn(out2)
@@ -119,13 +119,13 @@ class LSTM_AE(nn.Module):
 		# outputs = torch.cat([outputs, out2], dim=0)
 		# outputs = torch.stack(outputs)
 		# outputs = torch.cat(outputs)
-		# outputs = outputs.view(-1, self.n_window, self.n_feats)
+		# outputs = outputs.view(-1, self.window_size, self.n_feats)
 		# outputs = torch.squeeze(torch.stack(outputs))
 		return outputs
 	
 ## DAGMM Model (ICLR 18)
 class DAGMM(nn.Module):
-	def __init__(self, feats, n_window=5, prob=False):
+	def __init__(self, feats, window_size=5, prob=False):
 		super(DAGMM, self).__init__()
 		self.name = 'DAGMM'
 		self.lr = 0.0001
@@ -133,9 +133,9 @@ class DAGMM(nn.Module):
 		self.n_feats = feats
 		self.n_hidden = 16
 		self.n_latent = 8
-		self.n_window = n_window # DAGMM w_size = 5
-		self.n = self.n_feats * self.n_window
-		self.n_gmm = self.n_feats * self.n_window
+		self.window_size = window_size # DAGMM w_size = 5
+		self.n = self.n_feats * self.window_size
+		self.n_gmm = self.n_feats * self.window_size
 		self.encoder = nn.Sequential(
 			nn.Linear(self.n, self.n_hidden), nn.Tanh(),
 			nn.Linear(self.n_hidden, self.n_hidden), nn.Tanh(),
@@ -170,7 +170,7 @@ class DAGMM(nn.Module):
 
 ## OmniAnomaly Model (KDD 19)
 class OmniAnomaly(nn.Module):
-	def __init__(self, feats, n_window=None, prob=False):
+	def __init__(self, feats, window_size=None, prob=False):
 		super(OmniAnomaly, self).__init__()
 		self.name = 'OmniAnomaly'
 		self.lr = 0.002
@@ -207,15 +207,15 @@ class OmniAnomaly(nn.Module):
 
 ## USAD Model (KDD 20)
 class USAD(nn.Module):
-	def __init__(self, feats,  n_window=None, prob=False):
+	def __init__(self, feats,  window_size=None, prob=False):
 		super(USAD, self).__init__()
 		self.name = 'USAD'
 		self.lr = 0.0001
 		self.n_feats = feats
 		self.n_hidden = 16
 		self.n_latent = 5
-		self.n_window = 5 # USAD w_size = 5
-		self.n = self.n_feats * self.n_window
+		self.window_size = 5 # USAD w_size = 5
+		self.n = self.n_feats * self.window_size
 		self.encoder = nn.Sequential(
 			nn.Flatten(),
 			nn.Linear(self.n, self.n_hidden), nn.ReLU(True),
@@ -250,7 +250,7 @@ class MSCRED(nn.Module):
 		self.name = 'MSCRED'
 		self.lr = 0.0001
 		self.n_feats = feats
-		self.n_window = feats
+		self.window_size = feats
 		self.encoder = nn.ModuleList([
 			ConvLSTM(1, 32, (3, 3), 1, True, True, False),
 			ConvLSTM(32, 64, (3, 3), 1, True, True, False),
@@ -265,7 +265,7 @@ class MSCRED(nn.Module):
 
 	def forward(self, g):
 		## Encode
-		z = g.view(1, 1, self.n_feats, self.n_window)
+		z = g.view(1, 1, self.n_feats, self.window_size)
 		for cell in self.encoder:
 			_, z = cell(z.view(1, *z.shape))
 			z = z[0][0]
@@ -280,7 +280,7 @@ class CAE_M(nn.Module):
 		self.name = 'CAE_M'
 		self.lr = 0.001
 		self.n_feats = feats
-		self.n_window = feats
+		self.window_size = feats
 		self.encoder = nn.Sequential(
 			nn.Conv2d(1, 8, (3, 3), 1, 1), nn.Sigmoid(),
 			nn.Conv2d(8, 16, (3, 3), 1, 1), nn.Sigmoid(),
@@ -294,7 +294,7 @@ class CAE_M(nn.Module):
 
 	def forward(self, g):
 		## Encode
-		z = g.view(1, 1, self.n_feats, self.n_window)
+		z = g.view(1, 1, self.n_feats, self.window_size)
 		z = self.encoder(z)
 		## Decode
 		x = self.decoder(z)
@@ -307,7 +307,7 @@ class CAE_M(nn.Module):
 # 		self.name = 'MTAD_GAT'
 # 		self.lr = 0.0001
 # 		self.n_feats = feats
-# 		self.n_window = feats
+# 		self.window_size = feats
 # 		self.n_hidden = feats * feats
 # 		self.g = dgl.graph((torch.tensor(list(range(1, feats+1))), torch.tensor([0]*feats)))
 # 		self.g = dgl.add_self_loop(self.g)
@@ -317,13 +317,13 @@ class CAE_M(nn.Module):
 
 # 	def forward(self, data, hidden):
 # 		hidden = torch.rand(1, 1, self.n_hidden, dtype=torch.float64) if hidden is not None else hidden
-# 		data = data.view(self.n_window, self.n_feats)
+# 		data = data.view(self.window_size, self.n_feats)
 # 		data_r = torch.cat((torch.zeros(1, self.n_feats), data))
 # 		feat_r = self.feature_gat(self.g, data_r)
 # 		data_t = torch.cat((torch.zeros(1, self.n_feats), data.t()))
 # 		time_r = self.time_gat(self.g, data_t)
 # 		data = torch.cat((torch.zeros(1, self.n_feats), data))
-# 		data = data.view(self.n_window+1, self.n_feats, 1)
+# 		data = data.view(self.window_size+1, self.n_feats, 1)
 # 		x = torch.cat((data, feat_r, time_r), dim=2).view(1, 1, -1)
 # 		x, h = self.gru(x, hidden)
 # 		return x.view(-1), h
@@ -335,9 +335,9 @@ class CAE_M(nn.Module):
 # 		self.name = 'GDN'
 # 		self.lr = 0.0001
 # 		self.n_feats = feats
-# 		self.n_window = 5
+# 		self.window_size = 5
 # 		self.n_hidden = 16
-# 		self.n = self.n_window * self.n_feats
+# 		self.n = self.window_size * self.n_feats
 # 		src_ids = np.repeat(np.array(list(range(feats))), feats)
 # 		dst_ids = np.array(list(range(feats))*feats)
 # 		self.g = dgl.graph((torch.tensor(src_ids), torch.tensor(dst_ids)))
@@ -346,17 +346,17 @@ class CAE_M(nn.Module):
 # 		self.attention = nn.Sequential(
 # 			nn.Linear(self.n, self.n_hidden), nn.LeakyReLU(True),
 # 			nn.Linear(self.n_hidden, self.n_hidden), nn.LeakyReLU(True),
-# 			nn.Linear(self.n_hidden, self.n_window), nn.Softmax(dim=0),
+# 			nn.Linear(self.n_hidden, self.window_size), nn.Softmax(dim=0),
 # 		)
 # 		self.fcn = nn.Sequential(
 # 			nn.Linear(self.n_feats, self.n_hidden), nn.LeakyReLU(True),
-# 			nn.Linear(self.n_hidden, self.n_window), nn.Sigmoid(),
+# 			nn.Linear(self.n_hidden, self.window_size), nn.Sigmoid(),
 # 		)
 
 	# def forward(self, data):
 	# 	# Bahdanau style attention
-	# 	att_score = self.attention(data).view(self.n_window, 1)
-	# 	data = data.view(self.n_window, self.n_feats)
+	# 	att_score = self.attention(data).view(self.window_size, 1)
+	# 	data = data.view(self.window_size, self.n_feats)
 	# 	data_r = torch.matmul(data.permute(1, 0), att_score)
 	# 	# GAT convolution on complete graph
 	# 	feat_r = self.feature_gat(self.g, data_r)
@@ -367,14 +367,14 @@ class CAE_M(nn.Module):
 
 # MAD_GAN (ICANN 19)
 class MAD_GAN(nn.Module):
-	def __init__(self, feats, n_window=None, prob=False):
+	def __init__(self, feats, window_size=None, prob=False):
 		super(MAD_GAN, self).__init__()
 		self.name = 'MAD_GAN'
 		self.lr = 0.0001
 		self.n_feats = feats
 		self.n_hidden = 16
-		self.n_window = 5 # MAD_GAN w_size = 5
-		self.n = self.n_feats * self.n_window
+		self.window_size = 5 # MAD_GAN w_size = 5
+		self.n = self.n_feats * self.window_size
 		self.generator = nn.Sequential(
 			nn.Flatten(),
 			nn.Linear(self.n, self.n_hidden), nn.LeakyReLU(True),
@@ -404,9 +404,9 @@ class TranAD_Basic(nn.Module):
 		self.lr = lr
 		self.batch = 128
 		self.n_feats = feats
-		self.n_window = 10
-		self.n = self.n_feats * self.n_window
-		self.pos_encoder = PositionalEncoding(feats, 0.1, self.n_window)
+		self.window_size = 10
+		self.n = self.n_feats * self.window_size
+		self.pos_encoder = PositionalEncoding(feats, 0.1, self.window_size)
 		encoder_layers = TransformerEncoderLayer(d_model=feats, nhead=feats, dim_feedforward=16, dropout=0.1)
 		self.transformer_encoder = TransformerEncoder(encoder_layers, 1)
 		decoder_layers = TransformerDecoderLayer(d_model=feats, nhead=feats, dim_feedforward=16, dropout=0.1)
@@ -430,8 +430,8 @@ class TranAD_Transformer(nn.Module):
 		self.batch = 128
 		self.n_feats = feats
 		self.n_hidden = 8
-		self.n_window = 10
-		self.n = 2 * self.n_feats * self.n_window
+		self.window_size = 10
+		self.n = 2 * self.n_feats * self.window_size
 		self.transformer_encoder = nn.Sequential(
 			nn.Linear(self.n, self.n_hidden), nn.ReLU(True),
 			nn.Linear(self.n_hidden, self.n), nn.ReLU(True))
@@ -470,9 +470,9 @@ class TranAD_Adversarial(nn.Module):
 		self.lr = lr
 		self.batch = 128
 		self.n_feats = feats
-		self.n_window = 10
-		self.n = self.n_feats * self.n_window
-		self.pos_encoder = PositionalEncoding(2 * feats, 0.1, self.n_window)
+		self.window_size = 10
+		self.n = self.n_feats * self.window_size
+		self.pos_encoder = PositionalEncoding(2 * feats, 0.1, self.window_size)
 		encoder_layers = TransformerEncoderLayer(d_model=2 * feats, nhead=feats, dim_feedforward=16, dropout=0.1)
 		self.transformer_encoder = TransformerEncoder(encoder_layers, 1)
 		decoder_layers = TransformerDecoderLayer(d_model=2 * feats, nhead=feats, dim_feedforward=16, dropout=0.1)
@@ -506,9 +506,9 @@ class TranAD_SelfConditioning(nn.Module):
 		self.lr = lr
 		self.batch = 128
 		self.n_feats = feats
-		self.n_window = 10
-		self.n = self.n_feats * self.n_window
-		self.pos_encoder = PositionalEncoding(2 * feats, 0.1, self.n_window)
+		self.window_size = 10
+		self.n = self.n_feats * self.window_size
+		self.pos_encoder = PositionalEncoding(2 * feats, 0.1, self.window_size)
 		encoder_layers = TransformerEncoderLayer(d_model=2 * feats, nhead=feats, dim_feedforward=16, dropout=0.1)
 		self.transformer_encoder = TransformerEncoder(encoder_layers, 1)
 		decoder_layers1 = TransformerDecoderLayer(d_model=2 * feats, nhead=feats, dim_feedforward=16, dropout=0.1)
@@ -535,16 +535,16 @@ class TranAD_SelfConditioning(nn.Module):
 
 # Proposed Model + Self Conditioning + Adversarial + MAML (VLDB 22)
 class TranAD(nn.Module):
-	def __init__(self, feats, n_window, prob=False):
+	def __init__(self, feats, window_size, prob=False):
 		super(TranAD, self).__init__()
 		self.name = 'TranAD'
 		self.lr = lr
-		self.batch = 24 # 1 if n_window > 1280 else int(1280 / n_window) # 128
+		self.batch = 24 # 1 if window_size > 1280 else int(1280 / window_size) # 128
 		self.n_feats = feats
-		self.n_window = n_window
-		self.n = self.n_feats * self.n_window
+		self.window_size = window_size
+		self.n = self.n_feats * self.window_size
 		self.prob = prob
-		self.pos_encoder = PositionalEncoding(2 * feats, 0.1, self.n_window)
+		self.pos_encoder = PositionalEncoding(2 * feats, 0.1, self.window_size)
 		encoder_layers = TransformerEncoderLayer(d_model=2 * feats, nhead=feats, dim_feedforward=16, dropout=0.1)
 		self.transformer_encoder = TransformerEncoder(encoder_layers, 1)  #, enable_nested_tensor=False)
 		decoder_layers1 = TransformerDecoderLayer(d_model=2 * feats, nhead=feats, dim_feedforward=16, dropout=0.1)
@@ -579,29 +579,29 @@ class TranAD(nn.Module):
 		return x1_out, x2
 
 class iTransformer(nn.Module):
-	def __init__(self, feats, n_window, step_size=None, prob=False, weighted_window=False, forecasting=False):
+	def __init__(self, feats, window_size, step_size=None, prob=False, weighted_window=False, forecasting=False):
 		super(iTransformer, self).__init__()
 		self.name = 'iTransformer'
 		self.weighted = weighted_window
 		self.lr = lr
-		self.batch = 5 if n_window > 1000 else int(1280 / n_window) # 128 for window size 10
+		self.batch = 16  #  if window_size > 1000 else int(1280 / window_size) # 128 for window size 10
 		self.n_feats = feats
-		self.n_window = n_window
+		self.window_size = window_size
 		if step_size is not None:
 			self.test_step_size = step_size
 		else:
-			self.test_step_size = n_window
-		self.n = self.n_feats * self.n_window
-		self.seq_len = self.n_window
-		self.label_len = self.n_window
+			self.test_step_size = window_size
+		self.n = self.n_feats * self.window_size
+		self.seq_len = self.window_size
+		self.label_len = self.window_size
 		self.forecasting = forecasting 		# whether model output should be reconstruction or forecasting of input
 		if self.forecasting:
 			self.pred_len = 1  				# for forecasting-based AD, only want to predict 1 step ahead
 		else:
-			self.pred_len = self.n_window
+			self.pred_len = self.window_size
 		self.output_attention = False
 		self.use_norm = True
-		self.d_model = 2  # int(self.n_window / 2) # * feats  # 512
+		self.d_model = 2  # int(self.window_size / 2) # * feats  # 512
 		self.embed = 'TimeF'
 		self.freq = 's'
 		self.dropout = 0.1
@@ -689,17 +689,17 @@ class iTransformer(nn.Module):
 
 # iTransformer with encoder + decoder structure
 class iTransformer_dec(nn.Module):
-	def __init__(self, feats, n_window, prob=False):
+	def __init__(self, feats, window_size, prob=False):
 		super(iTransformer_dec, self).__init__()
 		self.name = 'iTransformer_dec'
 		self.lr = lr
-		self.batch = 48 # if n_window > 1280 else int(1280 / n_window) # 128 for window size 10
+		self.batch = 5 # if window_size > 1280 else int(1280 / window_size) # 128 for window size 10
 		self.n_feats = feats
-		self.n_window = n_window
-		self.n = self.n_feats * self.n_window
-		self.seq_len = self.n_window
-		self.label_len = self.n_window
-		self.pred_len = self.n_window
+		self.window_size = window_size
+		self.n = self.n_feats * self.window_size
+		self.seq_len = self.window_size
+		self.label_len = self.window_size
+		self.pred_len = self.window_size
 		self.output_attention = False
 		self.use_norm = True
 		self.d_model = 2 # 512

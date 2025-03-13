@@ -8,14 +8,12 @@ from torch.utils.data import Dataset, DataLoader
 
 
 file_prefixes = {
-	'SMD': 'machine-1-1_',
-	'SMAP': 'P-1_',
-	'SMAP_new': 'P-1_',
-	'MSL': 'C-1_',
-	'MSL_new': 'C-1_',
+	'SMD': ['machine-1-1_', 'machine-2-1_', 'machine-3-2_', 'machine-3-7_'],
+	'SMAP_new': ['A-4_', 'T-1_'],
+	'MSL_new': 'C-2_',
 	'UCR': '136_',
-	'NAB': 'ec2_request_latency_system_failure_',
 }
+
 
 class MyDataset(Dataset):
     def __init__(self, dataset, window_size, step_size, modelname, flag='train', feats=-1, less=False, enc=False, k=-1, forecasting=False):
@@ -73,10 +71,19 @@ class MyDataset(Dataset):
         kfold = False
 
         if self.less and self.data_name in file_prefixes.keys():
-                file = file_prefixes[self.data_name] + file
-                labelfile = file_prefixes[self.data_name] + labelfile
+                if isinstance(file_prefixes[self.data_name], list):
+                    paths = []; labelfile_complete = []
+                    for prefix in file_prefixes[self.data_name]:
+                        file_complete = prefix + file
+                        labelfile_complete.append(prefix + labelfile)
+                        paths.append(glob.glob(os.path.join(folder, f'*{file_complete}*.npy'))[0])
+                else:
+                    file = file_prefixes[self.data_name] + file
+                    labelfile = file_prefixes[self.data_name] + labelfile
+                    paths = glob.glob(os.path.join(folder, f'*{file}*.npy'))
+        else:
+            paths = glob.glob(os.path.join(folder, f'*{file}*.npy'))
 
-        paths = glob.glob(os.path.join(folder, f'*{file}*.npy'))
         paths = sorted(paths)  # sort paths to ensure correct order, otherwise labels & test files are mismatched
         if self.k >= 0 and len(paths) > 1:
             if self.k >= len(paths):
@@ -91,7 +98,12 @@ class MyDataset(Dataset):
         ts_lengths = [np.load(p).shape[0] for p in paths]
 
         if type == 'test':
-            l_paths = glob.glob(os.path.join(folder, f'*{labelfile}*.npy'))
+            if self.less and self.data_name in file_prefixes.keys() and isinstance(file_prefixes[self.data_name], list):
+                l_paths = []
+                for l in labelfile_complete:
+                    l_paths.append(glob.glob(os.path.join(folder, f'*{l}*.npy'))[0])
+            else:
+                l_paths = glob.glob(os.path.join(folder, f'*{labelfile}*.npy'))
             labels = np.concatenate([np.load(p) for p in l_paths])
 
         if self.feats > 0:
