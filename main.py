@@ -1,4 +1,4 @@
-import os, sys
+import os, sys, math
 import pandas as pd
 from tqdm import tqdm
 from torch.utils.data import DataLoader
@@ -7,13 +7,14 @@ from time import time
 from pprint import pprint
 from torchinfo import summary
 
-from src.models import *
 from src.constants import *
-from src.plotting import *
-from src.pot import SPOT
+from src.plotting import plot_accuracies, plot_labels, plot_losses, plotter, plotter2, compare_labels
+# from src.pot import SPOT
+from src.dlutils import ComputeLoss
 from src.utils import load_model, save_model, EarlyStopper
-from src.diagnosis import *
+from src.diagnosis import hit_att, ndcg
 from src.merlin import *
+from src.utils import combined_loss
 from src.data_loader import MyDataset
 
 
@@ -22,7 +23,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 	if 'DAGMM' in model.name:
 		l = nn.MSELoss(reduction = 'none')
 		compute = ComputeLoss(model, 0.1, 0.005, 'cpu', model.n_gmm)
-		n = epoch + 1; w_size = model.n_window
+		n = epoch + 1; w_size = model.window_size
 		l1s = []; l2s = []
 		if training:
 			for d in data:
@@ -50,7 +51,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 				return loss.detach().numpy()
 	if 'Attention' in model.name:
 		l = nn.MSELoss(reduction = 'none')
-		n = epoch + 1; w_size = model.n_window
+		n = epoch + 1; w_size = model.window_size
 		l1s = []; res = []
 		if training:
 			for d in data:
@@ -106,7 +107,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 				return loss.detach().numpy()
 	elif 'USAD' in model.name:
 		l = nn.MSELoss(reduction = 'none')
-		n = epoch + 1; w_size = model.n_window
+		n = epoch + 1; w_size = model.window_size
 		l1s, l2s = [], []
 		if training:
 			for d in data:
@@ -136,7 +137,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 				return loss.detach().numpy()
 	elif model.name in ['GDN', 'MTAD_GAT', 'MSCRED', 'CAE_M']:
 		l = nn.MSELoss(reduction = 'none')
-		n = epoch + 1; w_size = model.n_window
+		n = epoch + 1; w_size = model.window_size
 		l1s = []
 		if training:
 			for i, d in enumerate(data):
@@ -173,7 +174,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 		msel = nn.MSELoss(reduction = 'mean')
 		real_label, fake_label = torch.tensor([0.9]), torch.tensor([0.1]) # label smoothing
 		real_label, fake_label = real_label.type(torch.DoubleTensor), fake_label.type(torch.DoubleTensor)
-		n = epoch + 1; w_size = model.n_window
+		n = epoch + 1; w_size = model.window_size
 		mses, gls, dls = [], [], []
 		if training:
 			for d in data:
@@ -269,19 +270,19 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 			else:
 				return loss.detach().numpy()
 	elif 'iTransformer' in model.name:
-		# l = combined_loss(model.n_window)
-		# l = nn.MSELoss(reduction = 'none')
-		l = nn.HuberLoss(reduction = 'none')
+		# l = combined_loss(model.window_size)
+		l = nn.MSELoss(reduction = 'none')
+		# l = nn.HuberLoss(reduction = 'none')
 		n = epoch + 1
 		if model.weighted:
-			mid = model.n_window % 2
-			middle = math.floor(model.n_window / 2)
+			mid = model.window_size % 2
+			middle = math.floor(model.window_size / 2)
 			weights = [i + 1 for i in range(middle)] + mid * [middle+1] + [i for i in range(middle, 0, -1)]
 			weights /= np.sum(weights)
 			weights = torch.tensor(weights).view(-1,1).double()
 		if training:
 			l1s = []
-			for d in data: # d.shape is [B, n_window, N]
+			for d in data: # d.shape is [B, window_size, N]
 				local_bs = d.shape[0]
 				if enc_feats > 0:
 					d_enc = d[:, :, :enc_feats]
@@ -317,12 +318,12 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 		else:
 			z_all = torch.empty(0)
 			if model.weighted:
-				# loss = torch.zeros(size=(model.batch * model.n_window, feats))
+				# loss = torch.zeros(size=(model.batch * model.window_size, feats))
 				# new test: get loss according to position in window
-				loss = torch.zeros(size=(model.n_window, feats))
+				loss = torch.zeros(size=(model.window_size, feats))
 			else:
 				loss = torch.empty(0)
-			for i, d in enumerate(data): # d.shape is [B, n_window, N]
+			for i, d in enumerate(data): # d.shape is [B, window_size, N]
 				local_bs = d.shape[0]
 				if enc_feats > 0:
 					d_enc = d[:, :, :enc_feats]
@@ -337,7 +338,11 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 					z_mu = z[0]
 					z_logsigma = z[1]
 					z = z_mu
-				l1 = l(z, d)				
+				l1 = l(z, d)
+				# z_out, z25, z75 = torch.split(z, model.window_size, dim=1)  # when using combined_loss
+				# l1 = l(z_out, d)
+				# l1 = ((z_out - d) * (z75 - z25))**2
+				# l1 = torch.abs(l(z, d))
 				# loss_fct = torch.nn.GaussianNLLLoss(eps=1e-6, reduction='none')
 				# l1 = loss_fct(z, elem, torch.exp(2*z_logsigma))
 				if model.weighted:
@@ -345,7 +350,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 					# idx = i * local_bs * model.test_step_size
 					# for j in range(local_bs):
 					# 	start = idx +  j*model.test_step_size
-					# 	stop = start + model.n_window	
+					# 	stop = start + model.window_size	
 					# 	loss[start:stop] += l1_weighted[j]
 					# print(start, stop, idx)
 					# new test: get loss according to position in window
@@ -363,9 +368,11 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, enc
 			# 	z_std = torch.exp(z_logsigma)
 			# 	loss = loss / z_std  #+ z_std
 			if pred:
-				# z_all, _, _ = torch.split(z_all, model.n_window, dim=1)
+				# z_all, z25, z75 = torch.split(z_all, model.window_size, dim=1)
 				z_all = z_all.reshape(-1, feats)
-				return loss.detach().numpy(), z_all.detach().numpy() # because we have unnecessary third dimension
+				# z25 = z25.reshape(-1, feats)
+				# z75 = z75.reshape(-1, feats)
+				return loss.detach().numpy(), z_all.detach().numpy()  #, z25.detach().numpy(), z75.detach().numpy() # because we have unnecessary third dimension
 			else:
 				return loss.detach().numpy()
 	elif 'LSTM_AE' in model.name:
@@ -454,9 +461,9 @@ if __name__ == '__main__':
 
 	# define path for results, checkpoints & plots & create directories
 	if args.name:
-		folder = f'{args.model}/{args.model}_{args.dataset}/n_window{args.n_window}_steps{args.step_size}_feats{args.feats}_eps{args.epochs}_{args.name}'
+		folder = f'{args.model}_param_search/{args.model}_{args.dataset}/window{args.window_size}_steps{args.step_size}_dmodel{args.d_model}_feats{args.feats}_eps{args.epochs}/{args.name}'
 	else:
-		folder = f'{args.model}/{args.model}_{args.dataset}/n_window{args.n_window}_steps{args.step_size}_feats{args.feats}_eps{args.epochs}'
+		folder = f'{args.model}_param_search/{args.model}_{args.dataset}/window{args.window_size}_steps{args.step_size}_dmodel{args.d_model}_feats{args.feats}_eps{args.epochs}'
 	plot_path = f'{folder}/plots'
 	res_path = f'{folder}/results'
 	if args.checkpoint is None:
@@ -466,13 +473,13 @@ if __name__ == '__main__':
 	os.makedirs(plot_path, exist_ok=True)
 	os.makedirs(res_path, exist_ok=True)
 
-	train = MyDataset(args.dataset, args.n_window, args.step_size, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=args.k)
+	train = MyDataset(args.dataset, args.window_size, args.step_size, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=args.k)
 	if args.weighted:
-		test = MyDataset(args.dataset, args.n_window, args.step_size, args.model, flag='test', feats=args.feats, less=args.less, enc=args.enc, k=-1)
-		train_test = MyDataset(args.dataset, args.n_window, args.step_size, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=-1)
+		test = MyDataset(args.dataset, args.window_size, args.step_size, args.model, flag='test', feats=args.feats, less=args.less, enc=args.enc, k=-1)
+		train_test = MyDataset(args.dataset, args.window_size, args.step_size, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=-1)
 	else:
-		test = MyDataset(args.dataset, args.n_window, args.n_window, args.model, flag='test', feats=args.feats, less=args.less, enc=args.enc, k=args.k)
-		train_test = MyDataset(args.dataset, args.n_window, args.n_window, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=-1)
+		test = MyDataset(args.dataset, args.window_size, args.window_size, args.model, flag='test', feats=args.feats, less=args.less, enc=args.enc, k=args.k)
+		train_test = MyDataset(args.dataset, args.window_size, args.window_size, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=-1)
 	labels = test.get_labels()
 	
 	print('train set', train.__len__(), train.data.shape)
@@ -480,7 +487,7 @@ if __name__ == '__main__':
 	print('labels', labels.shape)
 	
 	if args.k > 0:
-		valid = MyDataset(args.dataset, args.n_window, args.step_size, args.model, flag='valid', feats=args.feats, less=args.less, enc=args.enc, k=args.k)
+		valid = MyDataset(args.dataset, args.window_size, args.step_size, args.model, flag='valid', feats=args.feats, less=args.less, enc=args.enc, k=args.k)
 		print(f'{args.k}-fold valid set', valid.__len__(), valid.data.shape)
 
 	feats = train.feats
@@ -490,7 +497,7 @@ if __name__ == '__main__':
 		data_loader_test = DataLoader(test, batch_size=24, shuffle=False)
 		eval(f'run_{args.model.lower()}(data_loader_test, labels, args.dataset)')
 	model, optimizer, scheduler, epoch, accuracy_list = \
-		load_model(args.model, feats, args.n_window, args.step_size, checkpoints_path, args.prob, args.weighted)
+		load_model(args.model, args.dataset, feats, args.window_size, args.step_size, args.d_model, args.test, checkpoints_path, args.prob, args.weighted)
 
 	# Calculate and print the number of parameters
 	total_params = sum(p.numel() for p in model.parameters())
@@ -572,8 +579,8 @@ if __name__ == '__main__':
 
 	### Scores
 	lossT = backprop(-1, model, data_loader_train_test, feats, optimizer, scheduler, training=False, enc_feats=enc_feats, prob=args.prob, pred=False)  # need anomaly scores on training data for POT
-	loss, y_pred = backprop(-1, model, data_loader_test, feats, optimizer, scheduler, training=False, enc_feats=enc_feats, prob=args.prob, pred=True)	
-	# loss = backprop(-1, model, data_loader_test, feats, optimizer, scheduler, training=False, enc_feats=enc_feats, prob=args.prob, pred=False)	
+	# loss, y_pred, y25, y75 = backprop(-1, model, data_loader_test, feats, optimizer, scheduler, training=False, enc_feats=enc_feats, prob=args.prob, pred=True)	
+	loss, y_pred = backprop(-1, model, data_loader_test, feats, optimizer, scheduler, training=False, enc_feats=enc_feats, prob=args.prob, pred=True)
 
 	# just for studies_posinwindow
 	# fig, axs = plt.subplots(nrows=feats, ncols=1, figsize=(16, feats * 2))
@@ -584,10 +591,10 @@ if __name__ == '__main__':
 	# 		ax = axs[dim]
 	# 	ax.plot(lossT[:, dim], '-o', label='train loss')
 	# 	ax.plot(loss[:, dim], '-o', label='test loss')
-	# 	if args.n_window > 20:
-	# 		ax.set_xticks(np.arange(0, args.n_window, 10))
+	# 	if args.window_size > 20:
+	# 		ax.set_xticks(np.arange(0, args.window_size, 10))
 	# 	else:
-	# 		ax.set_xticks(np.arange(0, args.n_window))
+	# 		ax.set_xticks(np.arange(0, args.window_size))
 	# 	ax.set_ylabel(f'Dim {dim}', rotation=0, ha='right', rotation_mode='default', labelpad=10)
 	# 	ax.legend(loc='upper right')
 	# if feats == 1:
@@ -597,7 +604,7 @@ if __name__ == '__main__':
 	# fig.subplots_adjust(hspace=0.2)  
 	# fig.align_ylabels(axs)
 	# plt.tight_layout()
-	# plt.savefig(f'studies_posinwindow/{args.model}_{args.dataset}_loss_posinw_window{args.n_window}.png', dpi=300)
+	# plt.savefig(f'studies_posinwindow/{args.model}_{args.dataset}_loss_posinw_window{args.window_size}.png', dpi=300)
 	# plt.close()
 
 	# # Plot average train and test loss over all dimensions
@@ -608,7 +615,7 @@ if __name__ == '__main__':
 	# plt.ylabel('Average loss across features')
 	# plt.legend(loc='upper right')
 	# plt.tight_layout()
-	# plt.savefig(f'studies_posinwindow/{args.model}_{args.dataset}_avgloss_posinw_window{args.n_window}.png', dpi=300)
+	# plt.savefig(f'studies_posinwindow/{args.model}_{args.dataset}_avgloss_posinw_window{args.window_size}.png', dpi=300)
 	# plt.close()
 	# print('plot saved')
 	# sys.exit()
@@ -623,12 +630,15 @@ if __name__ == '__main__':
 	if 'iTransformer' in model.name or model.name in ['LSTM_AE']:
 		# cut out the padding from test data, loss tensors
 		lossT_tmp, loss_tmp, y_pred_tmp = [], [], []
+		y25_tmp, y75_tmp = [], []
 		print(test.get_ts_lengths(), np.sum(test.get_ts_lengths()), len(test.get_ts_lengths()))
 		print(test.get_ideal_lengths(), np.sum(test.get_ideal_lengths()), len(test.get_ideal_lengths()))
 		start = 0
 		for i, l in enumerate(test.get_ts_lengths()):
 			loss_tmp.append(loss[start:start+l])
 			y_pred_tmp.append(y_pred[start:start+l])
+			# y25_tmp.append(y25[start:start+l])
+			# y75_tmp.append(y75[start:start+l])
 			start += test.get_ideal_lengths()[i]
 		
 		start = 0
@@ -639,6 +649,8 @@ if __name__ == '__main__':
 		lossT = np.concatenate(lossT_tmp, axis=0)
 		loss = np.concatenate(loss_tmp, axis=0)
 		y_pred = np.concatenate(y_pred_tmp, axis=0)
+		# y25 = np.concatenate(y25_tmp, axis=0)
+		# y75 = np.concatenate(y75_tmp, axis=0)
 	print(lossT.shape, loss.shape, labels.shape)
 	train_loss = np.mean(lossT)
 	test_loss = np.mean(loss)
@@ -652,8 +664,8 @@ if __name__ == '__main__':
 	# # if step_size > 1, define truth labels per window instead of per time stamp, can also just use non-overlapping windows for testing
 	# if args.step_size > 1:
 	# 	print(labels.shape, labels[labels[:,0]==1].shape, labels[labels[:,0]==0].shape)
-	# 	nb_windows = (len(labels) - args.n_window) // args.step_size
-	# 	labels = np.array([(np.sum(labels[i*args.step_size:i*args.step_size+args.n_window], axis=0) >= 1) + 0 for i in range(nb_windows)])
+	# 	nb_windows = (len(labels) - args.window_size) // args.step_size
+	# 	labels = np.array([(np.sum(labels[i*args.step_size:i*args.step_size+args.window_size], axis=0) >= 1) + 0 for i in range(nb_windows)])
 	# 	print(labels.shape, labels[labels[:,0]==1].shape, labels[labels[:,0]==0].shape)
 
 	### anomaly labels
@@ -700,12 +712,16 @@ if __name__ == '__main__':
 
 	# compare local & global anomaly labels
 	compare_labels(plot_path, pred_labels=[labelspred, labelspred_maj, labelspred_glob], true_labels=true_labels, 
-				plot_labels=['Local anomaly\n(inclusive OR)', 'Local anomaly\n(majority voting)', 'Global anomaly'], name='_all')
+				plot_labels=['Local anomaly\n(inclusive OR)', 'Local anomaly\n(majority voting)', 'Global anomaly'], 
+				name='_all')
 	
 	if feats <= 40:
-		plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred, labels, name='_local')
+		plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred, labels, name='_local_or')
 		plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred_maj, labels, name='_local_maj')
 		plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred_glob, labels, name='_global')
+		# plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred, labels, name='_local_or')
+		# plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred_maj, labels, name='_local_maj')
+		# plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred_glob, labels, name='_global')
 
 	# saving results
 	df_res_global = pd.DataFrame.from_dict(result_global, orient='index').T
@@ -716,7 +732,7 @@ if __name__ == '__main__':
 	result_local2.index = ['local_all_maj']
 	df_res_local = pd.concat([df_res_local, result_local1, result_local2])
 	df_res = pd.concat([df_res_local, df_res_global]) 
-	df_labels = pd.DataFrame( {'local': labelspred, 'local_maj': labelspred_maj, 'global': labelspred_glob} )
+	df_labels = pd.DataFrame( {'local_or': labelspred, 'local_maj': labelspred_maj, 'global': labelspred_glob} )
 
 	df_res.to_csv(f'{res_path}/res.csv')	
 	df_labels.to_csv(f'{res_path}/pred_labels.csv', index=False)

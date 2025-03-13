@@ -1,7 +1,8 @@
-import matplotlib.pyplot as plt
 import os
 import torch
-from src.constants import *
+import torch.nn as nn
+
+import src.models
 
 class color:
     HEADER = '\033[95m'
@@ -30,20 +31,37 @@ def save_model(folder, model, optimizer, scheduler, epoch, accuracy_list, name='
         'scheduler_state_dict': scheduler.state_dict(),
         'accuracy_list': accuracy_list}, file_path)
 
-def load_model(modelname, dims, n_window, step_size=None, path=None, prob=False, weighted=False):
-	import src.models
+def load_model(modelname, dataset, dims, window_size, step_size=None, d_model=None, 
+			   test=False, path=None, prob=False, weighted=False):
+	""" Load or create a model with the specified parameters.
+		Parameters:
+		modelname (str): The name of the model class to be loaded or created.
+		dims (int): The dimensions of the input data, corresponds to nb of features.
+		window_size (int): The window size for the model.
+		step_size (int, optional): The step size for the model. Default is None.
+		d_model (int, optional): The dimension of the model. Default is None.
+		path (str, optional): The path to load the model from. Default is None.
+		prob (bool, optional): Whether to use probabilistic modeling. Default is False.
+		weighted (bool, optional): Whether to use weighted loss. Default is False.
+		Returns:
+		tuple: A tuple containing the model, optimizer, scheduler, epoch, and accuracy_list.
+		If a pre-trained model exists at the specified path and retraining is not required, 
+		the model, optimizer, and scheduler states are loaded from the checkpoint. 
+		Otherwise, a new model is created and initialized.
+	"""
+
 	model_class = getattr(src.models, modelname)
 	if modelname == 'iTransformer':
-		model = model_class(dims, n_window, step_size, prob, weighted).double()
+		model = model_class(dims, window_size, step_size, d_model, prob, weighted).double()
 	else:
-		model = model_class(dims, n_window, prob).double()
+		model = model_class(dims, window_size, prob).double()
 	optimizer = torch.optim.AdamW(model.parameters() , lr=model.lr, weight_decay=1e-5)
 	scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 5, 0.9)
 	if path is not None:
 		fname = os.path.join(path, 'model_final.ckpt')
 	else:
-		fname = f'{args.model}_{args.dataset}/n_window{args.n_window}/checkpoints/model_final.ckpt'
-	if (os.path.exists(fname) and not args.retrain) or args.test:
+		fname = f'{modelname}_{dataset}/window_size{window_size}/checkpoints/model_final.ckpt'
+	if os.path.exists(fname) and test:
 		print(f"{color.GREEN}Loading pre-trained model: {model.name}{color.ENDC} from {fname}")
 		checkpoint = torch.load(fname)
 		model.load_state_dict(checkpoint['model_state_dict'])
@@ -57,6 +75,11 @@ def load_model(modelname, dims, n_window, step_size=None, path=None, prob=False,
 	return model, optimizer, scheduler, epoch, accuracy_list
 
 class EarlyStopper:
+	""" Early stopping class to stop training when the validation loss does not improve.
+		Parameters:
+		patience (int, optional): The number of epochs to wait before stopping. Default is 2.
+		min_delta (float, optional): The minimum change in validation loss to be considered an improvement. Default is 0.
+	"""
 	def __init__(self, patience=2, min_delta=0):
 		self.patience = patience
 		self.min_delta = min_delta
@@ -75,11 +98,27 @@ class EarlyStopper:
 		else:
 			self.min_validation_loss = validation_loss
 			self.counter = 0
-		# if validation_loss < self.min_validation_loss:
-		#     self.min_validation_loss = validation_loss
-		#     self.counter = 0
-		# elif validation_loss > (self.min_validation_loss + self.min_delta):
-		#     self.counter += 1
-		#     if self.counter >= self.patience:
-		#         return True
 		return False
+	
+
+def loss_quantile(output, target, quantile):  # pinball loss function, metric to asses accuracy of quantile predictions
+	z = target - output
+	loss = torch.where(z < 0, quantile * z, (quantile - 1) * z)
+	return loss
+
+class combined_loss(nn.Module):
+	def __init__(self, window_size):
+		super(combined_loss, self).__init__()
+		self.window_size = window_size
+	
+	def forward(self, output, target):
+		output1, output2, output3 = torch.split(output, self.window_size, dim=1)
+		loss_Huber = torch.nn.HuberLoss(reduction='none')
+		huber = loss_Huber(output1, target)
+		quantile1 = loss_quantile(output2, target, quantile=0.25)
+		quantile2 = loss_quantile(output3, target, quantile=0.75)
+		penalty = torch.log( torch.abs(output3 - output2) + 1e-4 )
+		loss_tot = huber + quantile1 + quantile2 - 0.01*penalty
+		# print('huber:', huber.mean().item(), 'quantile1:', quantile1.mean().item(), 'quantile2:', quantile2.mean().item(), 'penalty:', penalty.mean().item())
+		# print('loss:', loss_tot.mean().item())
+		return loss_tot

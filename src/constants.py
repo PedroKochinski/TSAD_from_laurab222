@@ -37,7 +37,7 @@ lm_d = {
 	}
 lm = lm_d[args.dataset][1 if 'TranAD' in args.model else 0]
 
-# Hyperparameters
+# Hyperparameters for TranAD
 lr_d = {
 		'SMD': 0.0001, 
 		'synthetic': 0.0001, 

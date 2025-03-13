@@ -73,7 +73,8 @@ def plot_losses(accuracy_list, folder):
 	epochs = range(1, len(lossT)+1)
 
 	plt.plot(epochs, lossT, label='Average Training Loss', marker='o')
-	plt.plot(epochs, lossV, label='Average Validation Loss', marker='o')
+	if np.any(lossV):
+		plt.plot(epochs, lossV, label='Average Validation Loss', marker='o')
 	# plt.xticks(epochs)
 	plt.xlabel('Epochs')
 	plt.ylabel('Average Loss')
@@ -138,6 +139,9 @@ def plotter2(path, x_true, x_pred, ascore, dataset, y_pred=None, y=None, name=''
 	if y is not None and y_pred is not None:
 		dims += 2
 	size = int(dims * 1.3)
+	x25, x75 = None, None
+	if isinstance(x_pred, list):
+		x_pred, x25, x75 = x_pred
 
 	fig, axs = plt.subplots(dims, 1, figsize=(17, size), sharex=True, constrained_layout=True)
 	if 'ATLAS' in dataset:
@@ -148,6 +152,8 @@ def plotter2(path, x_true, x_pred, ascore, dataset, y_pred=None, y=None, name=''
 	for dim, feat in enumerate(features):  # iterate through the features we're using
 		axs[dim].plot(x_true[:, dim], label='True')
 		axs[dim].plot(x_pred[:, dim], '--', label='Predicted')
+		if x25 is not None and x75 is not None:
+			axs[dim].fill_between(np.arange(x_pred.shape[0]), x25[:, dim], x75[:, dim], color='tab:orange', alpha=0.4)
 		axs[dim].set_ylabel(feat, rotation=0, ha='right', rotation_mode='default', labelpad=5)
 		axs[dim].yaxis.set_label_coords(-0.1, 0.5)
 		if 'ATLAS' in dataset:
