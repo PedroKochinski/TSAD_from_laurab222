@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# source /eos/user/l/lboggia/miniforge3/bin/activate
+# conda activate /eos/user/l/lboggia/miniforge3/envs/test4
+
+# cd /eos/user/l/lboggia/itransformerad  #  FOR FORECASTING NOT RECONSTRUCTION
+
 kfold=-1
 epochs=10
 W_default=96
@@ -62,6 +67,7 @@ do
     done
 done
 
+
 for d in MSL_new 
 do
     echo "data set $d"
@@ -87,7 +93,7 @@ do
     do  
         echo "rep $i"
         W_plus=850
-        python main.py --model iTransformer --dataset $d -w $W_plus -s $S_default -d $W_plus -e $epochs --feats $feats --k $kfold --name rep_$i --retrain --forecasting
+        python main.py --model iTransformer --dataset $d -w $W_plus -s $S_default -d 256 -e $epochs --feats $feats --k $kfold --name rep_$i --retrain --forecasting
         python main.py --model iTransformer --dataset $d -w $W_plus -s $S_default -d 170 -e $epochs --feats $feats --k $kfold --name rep_$i --retrain --forecasting
         W_minus=15 
         python main.py --model iTransformer --dataset $d -w $W_minus -s $S_default -d $W_minus -e $epochs --feats $feats --k $kfold --name rep_$i --retrain --forecasting
@@ -105,7 +111,7 @@ do
     do  
         echo "rep $i"
         W_plus=350
-        python main.py --model iTransformer --dataset $d -w $W_plus -s $S_default -d $W_plus -e $epochs --feats $feats --k $kfold --name rep_$i --retrain --forecasting
+        python main.py --model iTransformer --dataset $d -w $W_plus -s $S_default -d 256 -e $epochs --feats $feats --k $kfold --name rep_$i --retrain --forecasting
         python main.py --model iTransformer --dataset $d -w $W_plus -s $S_default -d 70 -e $epochs --feats $feats --k $kfold --name rep_$i --retrain --forecasting
         W_minus=10 
         python main.py --model iTransformer --dataset $d -w $W_minus -s $S_default -d $W_minus -e $epochs --feats $feats --k $kfold --name rep_$i --retrain --forecasting
@@ -123,8 +129,8 @@ do
     do  
         echo "rep $i"
         W_plus=1600
-        python main.py --model iTransformer --dataset $d -w $W_plus -s $S_default -d $W_plus -e $epochs --feats $feats --k $kfold --name rep_$i --retrain --forecasting
-        python main.py --model iTransformer --dataset $d -w $W_plus -s $S_default -d 320 -e $epochs --feats $feats --k $kfold --name rep_$i --retrain --forecasting
+        python main.py --model iTransformer --dataset $d -w $W_plus -s $S_default -d 256 -e $epochs --feats $feats --k $kfold --name rep_$i --retrain --forecasting
+        python main.py --model iTransformer --dataset $d -w $W_plus -s $S_default -d 51 -e $epochs --feats $feats --k $kfold --name rep_$i --retrain --forecasting
         W_minus=51
         python main.py --model iTransformer --dataset $d -w $W_minus -s $S_default -d $W_minus -e $epochs --feats $feats --k $kfold --name rep_$i --retrain --forecasting
         python main.py --model iTransformer --dataset $d -w $W_minus -s $S_default -d 10 -e $epochs --feats $feats --k $kfold --name rep_$i --retrain --forecasting
@@ -178,7 +184,7 @@ do
     do
         echo "rep $i"
         W_plus=750
-        python main.py --model iTransformer --dataset $d -w $W_plus -s $S_default -d $W_plus -e $epochs --feats $feats_less --k $kfold --name rep_$i --retrain --forecasting
+        python main.py --model iTransformer --dataset $d -w $W_plus -s $S_default -d 256 -e $epochs --feats $feats_less --k $kfold --name rep_$i --retrain --forecasting
         python main.py --model iTransformer --dataset $d -w $W_plus -s $S_default -d 150 -e $epochs --feats $feats_less --k $kfold --name rep_$i --retrain --forecasting
         W_minus=44
         python main.py --model iTransformer --dataset $d -w $W_minus -s $S_default -d $W_minus -e $epochs --feats $feats_less --k $kfold --name rep_$i --retrain --forecasting

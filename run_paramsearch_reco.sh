@@ -1,5 +1,11 @@
 #!/bin/bash
 
+
+# source /eos/user/l/lboggia/miniforge3/bin/activate
+# conda activate /eos/user/l/lboggia/miniforge3/envs/test4
+
+# cd /eos/user/l/lboggia/VSCode_projects/iTransformerAD/itransformerad
+
 kfold=-1
 epochs=10
 W_default=96
@@ -109,9 +115,9 @@ do
     do  
         echo "rep $i"
         W_plus=850
-        python main.py --model iTransformer --dataset $d -w $W_plus -s 425 -d $W_plus -e $epochs --feats $feats --k $kfold --name rep_$i --retrain
+        python main.py --model iTransformer --dataset $d -w $W_plus -s 425 -d 256 -e $epochs --feats $feats --k $kfold --name rep_$i --retrain
         python main.py --model iTransformer --dataset $d -w $W_plus -s 425 -d 170 -e $epochs --feats $feats --k $kfold --name rep_$i --retrain
-        python main.py --model iTransformer --dataset $d -w $W_plus -s 85 -d $W_plus -e $epochs --feats $feats --k $kfold --name rep_$i --retrain
+        python main.py --model iTransformer --dataset $d -w $W_plus -s 85 -d 256 -e $epochs --feats $feats --k $kfold --name rep_$i --retrain
         python main.py --model iTransformer --dataset $d -w $W_plus -s 85 -d 170 -e $epochs --feats $feats --k $kfold --name rep_$i --retrain
         W_minus=15
         python main.py --model iTransformer --dataset $d -w $W_minus -s 8 -d $W_minus -e $epochs --feats $feats --k $kfold --name rep_$i --retrain
@@ -133,9 +139,9 @@ do
     do  
         echo "rep $i"
         W_plus=350
-        python main.py --model iTransformer --dataset $d -w $W_plus -s 175 -d $W_plus -e $epochs --feats $feats --k $kfold --name rep_$i --retrain
+        python main.py --model iTransformer --dataset $d -w $W_plus -s 175 -d 256 -e $epochs --feats $feats --k $kfold --name rep_$i --retrain
         python main.py --model iTransformer --dataset $d -w $W_plus -s 175 -d 70 -e $epochs --feats $feats --k $kfold --name rep_$i --retrain
-        python main.py --model iTransformer --dataset $d -w $W_plus -s 35 -d $W_plus -e $epochs --feats $feats --k $kfold --name rep_$i --retrain
+        python main.py --model iTransformer --dataset $d -w $W_plus -s 35 -d 256 -e $epochs --feats $feats --k $kfold --name rep_$i --retrain
         python main.py --model iTransformer --dataset $d -w $W_plus -s 35 -d 70 -e $epochs --feats $feats --k $kfold --name rep_$i --retrain
         W_minus=10 
         python main.py --model iTransformer --dataset $d -w $W_minus -s 5 -d $W_minus -e $epochs --feats $feats --k $kfold --name rep_$i --retrain
@@ -157,10 +163,10 @@ do
     do  
         echo "rep $i"
         W_plus=1600
-        python main.py --model iTransformer --dataset $d -w $W_plus -s 800 -d $W_plus -e $epochs --feats $feats --k $kfold --name rep_$i --retrain
-        python main.py --model iTransformer --dataset $d -w $W_plus -s 800 -d 320 -e $epochs --feats $feats --k $kfold --name rep_$i --retrain
-        python main.py --model iTransformer --dataset $d -w $W_plus -s 160 -d $W_plus -e $epochs --feats $feats --k $kfold --name rep_$i --retrain
-        python main.py --model iTransformer --dataset $d -w $W_plus -s 160 -d 320 -e $epochs --feats $feats --k $kfold --name rep_$i --retrain
+        python main.py --model iTransformer --dataset $d -w $W_plus -s 800 -d 256 -e $epochs --feats $feats --k $kfold --name rep_$i --retrain
+        python main.py --model iTransformer --dataset $d -w $W_plus -s 800 -d 51 -e $epochs --feats $feats --k $kfold --name rep_$i --retrain
+        python main.py --model iTransformer --dataset $d -w $W_plus -s 160 -d 256 -e $epochs --feats $feats --k $kfold --name rep_$i --retrain
+        python main.py --model iTransformer --dataset $d -w $W_plus -s 160 -d 51 -e $epochs --feats $feats --k $kfold --name rep_$i --retrain
         W_minus=51
         python main.py --model iTransformer --dataset $d -w $W_minus -s 26 -d $W_minus -e $epochs --feats $feats --k $kfold --name rep_$i --retrain
         python main.py --model iTransformer --dataset $d -w $W_minus -s 26 -d 10 -e $epochs --feats $feats --k $kfold --name rep_$i --retrain
@@ -230,9 +236,9 @@ do
     do
         echo "rep $i"
         W_plus=750
-        python main.py --model iTransformer --dataset $d -w $W_plus -s 375 -d $W_plus -e $epochs --feats $feats_less --k $kfold --name rep_$i --retrain
+        python main.py --model iTransformer --dataset $d -w $W_plus -s 375 -d 256 -e $epochs --feats $feats_less --k $kfold --name rep_$i --retrain
         python main.py --model iTransformer --dataset $d -w $W_plus -s 375 -d 150 -e $epochs --feats $feats_less --k $kfold --name rep_$i --retrain
-        python main.py --model iTransformer --dataset $d -w $W_plus -s 75 -d $W_plus -e $epochs --feats $feats_less --k $kfold --name rep_$i --retrain
+        python main.py --model iTransformer --dataset $d -w $W_plus -s 75 -d 256 -e $epochs --feats $feats_less --k $kfold --name rep_$i --retrain
         python main.py --model iTransformer --dataset $d -w $W_plus -s 75 -d 150 -e $epochs --feats $feats_less --k $kfold --name rep_$i --retrain
         W_minus=44 
         python main.py --model iTransformer --dataset $d -w $W_minus -s 22 -d $W_minus -e $epochs --feats $feats_less --k $kfold --name rep_$i --retrain

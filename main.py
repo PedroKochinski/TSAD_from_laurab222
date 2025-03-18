@@ -478,7 +478,7 @@ if __name__ == '__main__':
 		test = MyDataset(args.dataset, args.window_size, args.step_size, args.model, flag='test', feats=args.feats, less=args.less, enc=args.enc, k=-1)
 		train_test = MyDataset(args.dataset, args.window_size, args.step_size, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=-1)
 	else:
-		test = MyDataset(args.dataset, args.window_size, args.window_size, args.model, flag='test', feats=args.feats, less=args.less, enc=args.enc, k=args.k)
+		test = MyDataset(args.dataset, args.window_size, args.window_size, args.model, flag='test', feats=args.feats, less=args.less, enc=args.enc, k=-1)
 		train_test = MyDataset(args.dataset, args.window_size, args.window_size, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=-1)
 	labels = test.get_labels()
 	
