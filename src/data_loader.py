@@ -219,6 +219,8 @@ class MyDataset(Dataset):
                 windows.append(w if self.modelname in ['TranAD', 'Attention', 'iTransformer', 'LSTM_AE'] else w.reshape(-1))
             windows = np.stack(windows)
             self.data = windows
+            if self.modelname not in ['TranAD', 'Attention', 'iTransformer', 'LSTM_AE']:
+                self.feats = windows.shape[1]
 
     def __len__(self):
         return len(self.data)

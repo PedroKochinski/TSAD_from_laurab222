@@ -1,64 +1,5 @@
 #!/bin/bash
 
-# for (( i=10; i<100; i+=10 ))
-# do
-#     echo "Window size: $i"
-#     python main.py --model iTransformer --window_size $i --dataset SMAP --retrain
-# done
-
-# for (( i=100; i<1000; i+=200 ))
-# do
-#     echo "Window size: $i"
-#     python main.py --model iTransformer --window_size $i --dataset SMAP --retrain
-# done
-
-# for i in 100 # 8500 200 500 1000 2000
-# do
-#     echo "Window size: $i"
-#     python main.py --model iTransformer --window_size $i --dataset SMAP --retrain
-# done
-
-# for i in 0.25 0.1 0.075 0.05 0.5 1e-2 1e-3 1e-4 5e-5 1e-5 5e-6 1e-6 1e-7
-# do 
-#     echo "detection level: $i"
-#     python main.py --model iTransformer --window_size 10 --dataset SMAP_new --q $i  
-#     # --test --checkpoint /Users/lauraboggia/VSCode_projects/TranAD/studies2.2/iTransformer_SMAP_new/detectionlvl_1e-05/checkpoints
-#     python main.py --model TranAD --window_size 10 --dataset SMAP_new --q $i 
-#     # --test --checkpoint /Users/lauraboggia/VSCode_projects/TranAD/studies2.2/iTransformer_SMAP_new/detectionlvl_1e-05/checkpoints
-    
-# done
-
-# for (( i=1; i<5; i++ ))
-# do 
-# # for f in 40  # 50 75 100 150
-# # do
-#     echo "$i : rep"
-#     python main.py --model iTransformer --window_size 100 --dataset GECCO --step_size 50 --feats -1 --retrain --name $i
-    
-# # done
-# done
-
-# for e in 10 15 20
-# do
-#     echo "# features $f"
-#     python main.py --model iTransformer --window_size 100 --dataset IEEECIS_pca_scaled --steps_size 50 --feats 100 --epochs $e --retrain
-    
-# done
-
-# for n in 100 200 500 1000 2000
-# do
-#     s=$(($n/2))
-#     echo "window_size $n step_size $s"
-#     python main.py --model iTransformer --window_size $n --dataset IEEECIS_pca_scaled --step_size $s --retrain --feats 40
-# done
-
-# for n in 5 10 20 30
-# do
-#     echo "window_size $n"
-#     python main.py --model iTransformer --window_size $n --dataset ATLAS_TS --step_size 1 --retrain --less
-#     python main.py --model TranAD --window_size $n --dataset ATLAS_TS --step_size 1 --retrain --less
-# done
-
 # for m in OmniAnomaly DAGMM iTransformer TranAD  #  LSTM_AD MAD_GAN
 # do
 #     echo "Model $m"
@@ -75,19 +16,19 @@
 #     # python main.py --model iTransformer --window_size 100 --dataset IEEECIS_new2.2 --step_size 50 --epochs 200 --retrain --feats 30 --k $i --name latent2_$i
 # done
 
-for d in SMAP_new MSL_new creditcard creditcard_normal # GECCO GECCO_normal # UCR SWaT_1D creditcard_normal SMAP_new creditcard
-do
-    echo "data set $d"
-    for i in {1..5}
-    do  
-        echo "rep $i"
-        # python main.py --model TranAD --window_size 10 --dataset $d --step_size 1 --epochs 5 --retrain --feats -1 --k $i --name $i
-        python main.py --model iTransformer --window_size 10 --dataset $d --step_size 1 --epochs 5 --retrain --feats -1 --k $i --name latent2_newloss5_$i --less
-        python main.py --model iTransformer --window_size 10 --dataset $d --step_size 5 --epochs 5 --retrain --feats -1 --k $i --name latent2_newloss5_$i --less
-        python main.py --model iTransformer --window_size 100 --dataset $d --step_size 50 --epochs 5 --retrain --feats -1 --k $i --name latent2_newloss5_$i --less
-        python main.py --model iTransformer --window_size 100 --dataset $d --step_size 10 --epochs 5 --retrain --feats -1 --k $i --name latent2_newloss5_$i --less
-    done
-done
+# for d in SMAP_new MSL_new creditcard creditcard_normal # GECCO GECCO_normal # UCR SWaT_1D creditcard_normal SMAP_new creditcard
+# do
+#     echo "data set $d"
+#     for i in {1..5}
+#     do  
+#         echo "rep $i"
+#         # python main.py --model TranAD --window_size 10 --dataset $d --step_size 1 --epochs 5 --retrain --feats -1 --k $i --name $i
+#         python main.py --model iTransformer --window_size 10 --dataset $d --step_size 1 --epochs 5 --retrain --feats -1 --k $i --name latent2_newloss5_$i --less
+#         python main.py --model iTransformer --window_size 10 --dataset $d --step_size 5 --epochs 5 --retrain --feats -1 --k $i --name latent2_newloss5_$i --less
+#         python main.py --model iTransformer --window_size 100 --dataset $d --step_size 50 --epochs 5 --retrain --feats -1 --k $i --name latent2_newloss5_$i --less
+#         python main.py --model iTransformer --window_size 100 --dataset $d --step_size 10 --epochs 5 --retrain --feats -1 --k $i --name latent2_newloss5_$i --less
+#     done
+# done
 
 # for d in GECCO GECCO_normal
 # do
@@ -135,3 +76,11 @@ done
 
 # python main.py --model iTransformer --window_size 2000 --dataset ATLAS_DQM_TS --retrain --step_size 1000 --feats -1 --name train_all
 # python main.py --model iTransformer --window_size 1000 --dataset WADI --retrain --step_size 500 --feats -1 --name latent2_1 --k 1
+
+# # MSL_new
+# python main.py --model iTransformer --dataset MSL_new -w $W_default -s $S_default -d $W_default -e $epochs --feats $feats --k $kfold --name rep_5 --retrain --forecasting 
+# python main.py --model iTransformer --dataset MSL_new -w $W_default -s $S_default -d 19 -e $epochs --feats $feats --k $kfold --name rep_4 --test --forecasting 
+# python main.py --model iTransformer --dataset MSL_new -w $W_default -s $S_default -d 19 -e $epochs --feats $feats --k $kfold --name rep_5 --retrain --forecasting 
+# W_minus=10 
+# python main.py --model iTransformer --dataset MSL_new -w $W_minus -s $S_default -d $W_minus -e $epochs --feats $feats --k $kfold --name rep_5 --test --forecasting
+# python main.py --model iTransformer --dataset MSL_new -w $W_minus -s $S_default -d 2 -e $epochs --feats $feats --k $kfold --name rep_5 --retrain --forecasting

@@ -25,7 +25,11 @@ def parse_arguments() -> argparse.Namespace:
 	parser.add_argument('--weighted', action='store_true', help="use weighted loss over time stamps in a window")
 	parser.add_argument('--enc', action='store_true', help="use additional time encoder covariate")
 	parser.add_argument('--shuffle', action='store_true', help="shuffle the train/valid data")
-	
+
+	# Loss function
+	parser.add_argument('--loss', type=str, required=False, default='MSE', 
+					 help="choose loss function: either 'MSE', 'Huber', 'Huber_quant', or 'penalty'")
+
 	# Miscellaneous
 	parser.add_argument('--name', type=str, required=False, default=None, help="name of the output folder")
 	parser.add_argument('--f', default=None, help='dummy argument for jupyter notebooks')

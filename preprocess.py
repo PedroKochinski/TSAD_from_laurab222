@@ -42,9 +42,9 @@ def normalize3(a, min_a = 0, max_a = 1):  # min_a = None, max_a = None
 	if min_a is None: min_a, max_a = np.min(a, axis = 0), np.max(a, axis = 0)
 	return (a - min_a) / (max_a - min_a + 0.0001), min_a, max_a
 
-def convertNumpy(df, data=None):
-	if data == 'WADI':
-		x = df.drop(columns=['Row', 'Time', 'Date']).values[::10, :]  # downsampling, only keep 1/10 of data
+def convertNumpy(df, reduce=False):
+	if reduce:
+		x = df.values[::10, :]  # downsampling, only keep 1/10 of data
 	else:
 		x = df.values
 	return (x - x.min(0)) / (x.ptp(0) + 1e-4)
@@ -131,7 +131,8 @@ def load_data(dataset):
 		labels = (labels == 'Attack').astype(int)
 		train = train.drop(columns=['Normal/Attack', 'Timestamp'])  # are all 'Normal' anyways
 		test = test.drop(columns=['Normal/Attack', 'Timestamp'])
-		train, test = convertNumpy(train), convertNumpy(test)
+		train, test = convertNumpy(train, reduce=True), convertNumpy(test, reduce=True) # downsampling, only keep 1/10 of data
+		labels = labels[::10]  # downsampling, only keep 1/10 of data
 		print(train.shape, test.shape, labels.shape)
 		for file in ['train', 'test', 'labels']:
 			np.save(os.path.join(folder, f'{file}.npy'), eval(file))
@@ -139,11 +140,12 @@ def load_data(dataset):
 		dataset_folder = 'data/WADI/WADI.A2_19Nov2019'  # use version A2 where unstable period is removed
 		train = pd.read_csv(os.path.join(dataset_folder, 'WADI_14days_new.csv'))
 		test = pd.read_csv(os.path.join(dataset_folder, 'WADI_attackdataLABLE.csv'))
+		train.drop(columns=['Row', 'Time', 'Date']), test.drop(columns=['Row', 'Time', 'Date'])
 		train.dropna(how='all', inplace=True); test.dropna(how='all', inplace=True)
 		train.fillna(0, inplace=True); test.fillna(0, inplace=True)
 		labels = test["AttackLABLE (1:No Attack, -1:Attack)"]
 		test = test.drop(columns=["AttackLABLE (1:No Attack, -1:Attack)"])
-		train, test = convertNumpy(train, data='WADI'), convertNumpy(test, data='WADI')
+		train, test = convertNumpy(train, reduce=True), convertNumpy(test, reduce=True) # downsampling, only keep 1/10 of data
 		labels = labels.values  # 1 for normal, -1 for attack, but want 0 for normal, 1 for attack
 		labels = (1 - labels) / 2
 		labels = labels[::10]  # downsampling, only keep 1/10 of data

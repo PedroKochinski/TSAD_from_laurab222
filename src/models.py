@@ -171,12 +171,13 @@ class OmniAnomaly(nn.Module):
 	def __init__(self, feats, window_size=None, prob=False):
 		super(OmniAnomaly, self).__init__()
 		self.name = 'OmniAnomaly'
+		self.batch = 1
 		self.lr = 0.002
 		self.beta = 0.01
 		self.n_feats = feats
 		self.n_hidden = 32
 		self.n_latent = 8
-		self.lstm = nn.GRU(feats, self.n_hidden, 2)
+		self.lstm = nn.GRU(self.n_feats, self.n_hidden, 2)
 		self.encoder = nn.Sequential(
 			nn.Linear(self.n_hidden, self.n_hidden), nn.PReLU(),
 			nn.Linear(self.n_hidden, self.n_hidden), nn.PReLU(),
@@ -577,7 +578,7 @@ class TranAD(nn.Module):
 		return x1_out, x2
 
 class iTransformer(nn.Module):
-	def __init__(self, feats, window_size, step_size=None, d_model=2, prob=False, weighted_window=False):
+	def __init__(self, feats, window_size, step_size=None, d_model=2, loss='MSE', prob=False, weighted_window=False):
 		super(iTransformer, self).__init__()
 		self.name = 'iTransformer'
 		self.weighted = weighted_window
@@ -592,7 +593,9 @@ class iTransformer(nn.Module):
 		# self.n = self.n_feats * self.window_size
 		self.seq_len = self.window_size
 		self.label_len = self.window_size
-		self.pred_len = self.window_size  # or 3* if using combined loss from utils.py
+		self.pred_len = self.window_size  
+		if loss in ['Huber_quant', 'penalty']:
+			self.pred_len *= 3  # 3* if using combined loss from utils.py
 		self.output_attention = False
 		self.use_norm = True
 		self.d_model = d_model 
