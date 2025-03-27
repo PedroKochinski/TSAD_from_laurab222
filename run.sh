@@ -76,17 +76,17 @@
 #     # python main.py --model iTransformer --n_window 100 --dataset IEEECIS_new2.2 --step_size 50 --epochs 200 --retrain --feats 30 --k $i --name latent2_$i
 # done
 
-for d in GECCO # UCR GECCO SWaT_1D # ATLAS_TS
-do
-    echo "data set $d"
-    for i in {1..5}
-    do  
-        echo "rep $i"
-        # python main.py --model TranAD --n_window 10 --dataset $d --step_size 1 --epochs 200 --retrain --feats -1 --k $i --name $i
-        python main.py --model iTransformer --n_window 10 --dataset $d --step_size 1 --epochs 100 --retrain --feats -1 --k $i --name latent2_$i 
-        python main.py --model iTransformer --n_window 100 --dataset $d --step_size 50 --epochs 100 --retrain --feats -1 --k $i --name latent2_$i 
-    done
-done
+# for d in GECCO # UCR GECCO SWaT_1D # ATLAS_TS
+# do
+#     echo "data set $d"
+#     for i in {1..5}
+#     do  
+#         echo "rep $i"
+#         # python main.py --model TranAD --n_window 10 --dataset $d --step_size 1 --epochs 200 --retrain --feats -1 --k $i --name $i
+#         python main.py --model iTransformer --n_window 10 --dataset $d --step_size 1 --epochs 100 --retrain --feats -1 --k $i --name latent2_$i 
+#         python main.py --model iTransformer --n_window 100 --dataset $d --step_size 50 --epochs 100 --retrain --feats -1 --k $i --name latent2_$i 
+#     done
+# done
 
 # for d in SMD # SWaT UCR GECCO ATLAS_TS SMD MSL_new
 # do
@@ -114,3 +114,17 @@ done
 
 # python main.py --model iTransformer --n_window 2000 --dataset ATLAS_DQM_TS --retrain --step_size 1000 --feats -1 --name train_all
 # python main.py --model iTransformer --n_window 1000 --dataset WADI --retrain --step_size 500 --feats -1 --name latent2_1 --k 1
+
+W_default=96
+S_default=1
+epochs=10
+feats=-1
+kfold=-1
+
+# MSL_new
+python main.py --model iTransformer --dataset MSL_new -w $W_default -s $S_default -d $W_default -e $epochs --feats $feats --k $kfold --name rep_5 --retrain --forecasting 
+python main.py --model iTransformer --dataset MSL_new -w $W_default -s $S_default -d 19 -e $epochs --feats $feats --k $kfold --name rep_4 --test --forecasting 
+python main.py --model iTransformer --dataset MSL_new -w $W_default -s $S_default -d 19 -e $epochs --feats $feats --k $kfold --name rep_5 --retrain --forecasting 
+W_minus=10 
+python main.py --model iTransformer --dataset MSL_new -w $W_minus -s $S_default -d $W_minus -e $epochs --feats $feats --k $kfold --name rep_5 --test --forecasting
+python main.py --model iTransformer --dataset MSL_new -w $W_minus -s $S_default -d 2 -e $epochs --feats $feats --k $kfold --name rep_5 --retrain --forecasting
