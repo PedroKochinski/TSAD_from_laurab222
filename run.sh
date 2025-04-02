@@ -84,3 +84,31 @@
 # W_minus=10 
 # python main.py --model iTransformer --dataset MSL_new -w $W_minus -s $S_default -d $W_minus -e $epochs --feats $feats --k $kfold --name rep_5 --test --forecasting
 # python main.py --model iTransformer --dataset MSL_new -w $W_minus -s $S_default -d 2 -e $epochs --feats $feats --k $kfold --name rep_5 --retrain --forecasting
+
+kfold=-1
+epochs=10
+feats=-1
+
+for i in {1..5}
+do
+    # python main.py --model iTransformer --dataset creditcard_normal -w 10 -s 1 -d 2 -e $epochs --feats $feats\
+    # --loss Huber --k $i --name testMSE/rep_$i --test --checkpoint iTransformer_loss_fct/iTransformer_creditcard_normal/window10_steps1_dmodel2_feats-1_eps10_Huber/rep_$i/checkpoints/ > iTransformer/creditcard_normal_Huber_MSEtest$i.log
+    python main.py --model iTransformer --dataset GECCO_normal -w 12 -s 1 -d 2 -e $epochs --feats $feats\
+    --loss Huber_quant --k $i --name testMSE/rep_$i --test --checkpoint iTransformer_loss_fct/iTransformer_GECCO_normal/window12_steps1_dmodel2_feats-1_eps10_Huber_quanr/rep_$i/checkpoints/ > iTransformer/GECCO_normal_Huber_quant_MSEtest$i.log
+    # python main.py --model iTransformer --dataset IEEECIS_new2.2 -w 10 -s 1 -d 2 -e $epochs --feats 30\
+    # --loss Huber --k $i --name testMSE/rep_$i --test --checkpoint iTransformer_loss_fct/iTransformer_IEEECIS_new2.2/window10_steps1_dmodel2_feats30_eps10_Huber/rep_$i/checkpoints/ > iTransformer/IEEECIS_new2.2_Huber_MSEtest$i.log
+    # python main.py --model iTransformer --dataset MSL_new -w 96 -s 10 -d 96 -e $epochs --feats $feats\
+    # --loss Huber --k $i --name testMSE/rep_$i --test --checkpoint iTransformer_loss_fct/iTransformer_MSL_new/window96_steps10_dmodel96_feats-1_eps10_Huber/rep_$i/checkpoints/ > iTransformer/MSL_new_Huber_MSEtest$i.log
+    # python main.py --model iTransformer --dataset SMAP_new -w 15 -s 2 -d 15 -e $epochs --feats $feats\
+    # --loss Huber --k $i --name testMSE/rep_$i --test --checkpoint iTransformer_loss_fct/iTransformer_SMAP_new/window15_steps2_dmodel15_feats-1_eps10_Huber/rep_$i/checkpoints/ > iTransformer/SMAP_new_Huber_MSEtest$i.log
+    # python main.py --model iTransformer --dataset SMD -w 350 -s 35 -d 70 -e $epochs --feats $feats\
+    # --loss Huber --k $i --name testMSE/rep_$i --test --checkpoint iTransformer_loss_fct/iTransformer_SMD/window350_steps35_dmodel70_feats-1_eps10_Huber/rep_$i/checkpoints/ > iTransformer/SMD_Huber_MSEtest$i.log
+    # python main.py --model iTransformer --dataset SWaT -w 51 -s 5 -d 10 -e $epochs --feats $feats\
+    # --loss Huber --k $i --name testMSE/rep_$i --test --checkpoint iTransformer_loss_fct/iTransformer_SWaT/window51_steps5_dmodel10_feats-1_eps10_Huber/rep_$i/checkpoints/ > iTransformer/SWaT_Huber_MSEtest$i.log
+    # python main.py --model iTransformer --dataset SWaT_1D -w 10 -s 5 -d 2 -e $epochs --feats $feats\
+    # --loss Huber --k $i --name testMSE/rep_$i --test --checkpoint iTransformer_loss_fct/iTransformer_SWaT_1D/window10_steps5_dmodel2_feats-1_eps10_Huber/rep_$i/checkpoints/ > iTransformer/SWaT_1D_Huber_MSEtest$i.log
+    # python main.py --model iTransformer --dataset UCR -w 10 -s 5 -d 2 -e $epochs --feats $feats\
+    # --loss Huber --k $i --name testMSE/rep_$i --test --checkpoint iTransformer_loss_fct/iTransformer_UCR/window10_steps5_dmodel2_feats-1_eps10_Huber/rep_$i/checkpoints/ > iTransformer/UCR_Huber_MSEtest$i.log
+    # python main.py --model iTransformer --dataset WADI -w 44 -s 4 -d 44 -e $epochs --feats 30\
+    # --loss Huber --k $i --name testMSE/rep_$i --test --checkpoint iTransformer_loss_fct/iTransformer_WADI/window44_steps4_dmodel44_feats30_eps10_Huber/rep_$i/checkpoints/ > iTransformer/WADI_Huber_MSEtest$i.log
+done

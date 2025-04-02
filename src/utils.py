@@ -60,9 +60,9 @@ def load_model(modelname, dataset, dims, window_size, step_size=None, d_model=No
 	optimizer = torch.optim.AdamW(model.parameters() , lr=model.lr, weight_decay=1e-5)
 	scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 5, 0.9)
 	if path is not None:
-		fname = os.path.join(path, 'model_final.ckpt')
+		fname = os.path.join(path, 'model_best.ckpt')
 	else:
-		fname = f'{modelname}_{dataset}/window_size{window_size}/checkpoints/model_final.ckpt'
+		fname = f'{modelname}_{dataset}/window_size{window_size}/checkpoints/model_best.ckpt'
 	if os.path.exists(fname) and test:
 		print(f"{color.GREEN}Loading pre-trained model: {model.name}{color.ENDC} from {fname}")
 		checkpoint = torch.load(fname)

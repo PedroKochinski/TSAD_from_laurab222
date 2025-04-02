@@ -326,6 +326,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, los
 			scheduler.step()
 			return np.mean(l1s), optimizer.param_groups[0]['lr']
 		else:
+			l = nn.MSELoss(reduction = 'none')  # always use MSE for testing
 			z_all = torch.empty(0)
 			if model.weighted:
 				# loss = torch.zeros(size=(model.batch * model.window_size, feats))
@@ -348,10 +349,11 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, los
 					z_mu = z[0]
 					z_logsigma = z[1]
 					z = z_mu
-				l1 = l(z, d)
-				# if loss in ['Huber_quant', 'penalty']:
-				# 	z_out, _, _ = torch.split(z, model.window_size, dim=1)  # when using combined_loss
-				# 	l1 = l(z_out, d)
+				if lossname in ['Huber_quant', 'penalty']:
+					z_out, _, _ = torch.split(z, model.window_size, dim=1)  # when using combined_loss
+				else:
+					z_out = z
+				l1 = l(z_out, d)
 				# else:
 				# l1 = ((z_out - d) * (z75 - z25))**2
 				# l1 = torch.abs(l(z, d))
