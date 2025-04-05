@@ -55,6 +55,8 @@ def load_model(modelname, dataset, dims, window_size, step_size=None, d_model=No
 	model_class = getattr(src.models, modelname)
 	if modelname == 'iTransformer':
 		model = model_class(dims, window_size, step_size, d_model, loss, prob, weighted).double()
+	elif modelname == 'Transformer':
+		model = model_class(dims, window_size, step_size, d_model, loss, prob, weighted).double()
 	else:
 		model = model_class(dims, window_size, prob).double()
 	optimizer = torch.optim.AdamW(model.parameters() , lr=model.lr, weight_decay=1e-5)

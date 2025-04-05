@@ -307,4 +307,22 @@ def compare_labels(path, pred_labels, true_labels, plot_labels, name=''):
 	plt.savefig(f'{path}/compare_labels2{name}.png', dpi=100)
 	plt.close()
         
+def plot_correlation_anomalyscore(loss, IQR, labels, path):
+	os.makedirs(path, exist_ok=True)
 
+	loss = np.average(loss, axis=1)
+	loss /= np.max(loss)
+	IQR = np.average(IQR, axis=1) 
+	IQR /= np.max(IQR)
+	labels = (np.sum(labels, axis=1) >= 1) + 0
+	
+	# Scatter plot for test loss
+	plt.figure(figsize=(7, 6))
+	plt.scatter(loss, IQR, c=labels, cmap='coolwarm')
+	# plt.hist(loss, bins=100, alpha=0.5, label='Test Loss', density=True)
+	plt.colorbar(label='Anomaly Label')
+	plt.ylabel('IQR')
+	plt.xlabel('Test Loss')
+	plt.tight_layout()
+	plt.savefig(f'{path}/loss_test.png', dpi=100)
+	plt.close()

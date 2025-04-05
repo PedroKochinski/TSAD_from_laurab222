@@ -12,7 +12,7 @@ from src.constants import *
 # new for iTransformer
 from layers.Transformer_EncDec import Encoder, EncoderLayer, Decoder, DecoderLayer
 from layers.SelfAttention_Family import FullAttention, AttentionLayer
-from layers.Embed import DataEmbedding_inverted
+from layers.Embed import DataEmbedding_inverted, DataEmbedding
 
 ## Separate LSTM for each variable
 class LSTM_Univariate(nn.Module):
@@ -754,10 +754,6 @@ class iTransformer_dec(nn.Module):
 		norm_layer=torch.nn.LayerNorm(self.latent),
 		projection = nn.Linear(self.latent, self.pred_len, bias=True)
 		)
-		# else:
-		# 	decoder_layers = TransformerDecoderLayer(d_model=self.d_model, nhead=self.n_feats, dim_feedforward=self.d_ff, dropout=0.1)
-		# 	self.decoder= TransformerDecoder(decoder_layers, 1)
-		
 
 	def forecast(self, x_enc, x_mark_enc=None):
 		if self.use_norm:
@@ -801,3 +797,104 @@ class iTransformer_dec(nn.Module):
 
 		dec_out = self.forecast(src, src_mark_enc)  # [B, L, N]
 		return dec_out
+
+class Transformer(nn.Module):  # vanilla transformer for comparison
+	def __init__(self, feats, window_size, step_size=None, d_model=2, loss='MSE', prob=False, weighted_window=False):
+		super(Transformer, self).__init__()
+		self.name = 'Transformer'
+		self.weighted = weighted_window
+		self.lr = 0.0001
+		self.batch = 12  
+		self.n_feats = feats
+		self.window_size = window_size
+		self.seq_len = self.window_size
+		self.label_len = self.window_size
+		self.pred_len = self.window_size  
+		if loss in ['Huber_quant', 'penalty']:
+			self.pred_len *= 3  # 3* if using combined loss from utils.py
+		self.output_attention = False
+		self.use_norm = True
+		self.d_model = d_model 
+		self.embed = 'TimeF'
+		self.freq = 's'
+		self.dropout = 0.1
+		self.n_heads = feats  # was done like this for other algos
+		self.e_layers = 2
+		self.d_ff = 256 # 128 # 16
+		self.factor = 1  # attention factor
+		self.activation = 'gelu'
+		self.prob = prob 		# whether model gives back probabilistic output instead of single value output
+        # Embedding, NOT inverted
+		self.enc_embedding = DataEmbedding(self.n_feats, self.d_model, self.embed, self.freq, self.dropout)
+        # Encoder-only architecture
+		self.encoder = Encoder(
+            [
+                EncoderLayer(
+                    AttentionLayer(
+                        FullAttention(False, self.factor, attention_dropout=self.dropout,
+                                      output_attention=self.output_attention), 
+									  self.d_model, self.n_heads, d_keys=self.d_model, d_values=self.d_model),
+                    self.d_model,
+                    self.d_ff,
+                    dropout=self.dropout,
+                    activation=self.activation
+                ) for l in range(self.e_layers)
+            ],
+            norm_layer=torch.nn.LayerNorm(self.d_model)
+        )
+		if self.prob:
+			self.projector = nn.Linear(self.d_model, 2*self.n_feats, bias=True)  # double the outputs
+		else:
+			self.projector = nn.Linear(self.d_model, self.n_feats, bias=True)
+
+	def forecast(self, x_enc, x_mark_enc=None):
+		if self.use_norm:
+			# Normalization from Non-stationary Transformer
+			means = x_enc.mean(1, keepdim=True).detach()
+			x_enc = x_enc - means
+			stdev = torch.sqrt(torch.var(x_enc, dim=1, keepdim=True, unbiased=False) + 1e-5)
+			x_enc /= stdev
+
+		_, L, N = x_enc.shape # B L N
+        # B: batch_size;    E: d_model; 
+        # L: seq_len;       S: pred_len;
+        # N: number of variate (tokens), can also includes covariates
+
+        # Embedding
+        # B L N -> B L E                in the vanilla Transformer)
+		enc_out = self.enc_embedding(x_enc, x_mark_enc) # covariates (e.g timestamp) can be also embedded as tokens
+        
+        # B L E -> B L E                in the vanilla Transformer)
+        # the dimensions of embedded time series has been inverted, and then processed by native attn, layernorm and ffn modules
+		enc_out, attns = self.encoder(enc_out, attn_mask=None)
+
+        # B L E -> B L N
+		dec_out = self.projector(enc_out)
+
+		if self.use_norm:
+			# De-Normalization from Non-stationary Transformer
+			if self.prob:
+				dec_out = dec_out * (stdev[:, 0, :].unsqueeze(1).repeat(1, 2*self.pred_len, 1))
+				dec_out = dec_out + (means[:, 0, :].unsqueeze(1).repeat(1, 2*self.pred_len, 1))
+			else:
+				dec_out = dec_out * (stdev[:, 0, :].unsqueeze(1).repeat(1, self.pred_len, 1))
+				dec_out = dec_out + (means[:, 0, :].unsqueeze(1).repeat(1, self.pred_len, 1))
+
+		return dec_out
+	
+	def forward(self, src, src_mark_enc=None):
+		# decoder input
+		# dec_inp = torch.zeros_like(src[:, -self.pred_len:, :])
+		# dec_inp = torch.cat([src[:, :self.label_len, :], dec_inp], dim=1)
+		
+		dec_out = self.forecast(src, src_mark_enc)  # [B, 2L, N]
+		if self.prob:
+			dec_mu, dec_logsigma = torch.split(dec_out, split_size_or_sections=self.pred_len, dim=1)
+			dec_mu = dec_mu[:, -1:, :].permute(1, 0, 2)  # [1, B, N], for AD only give back last element of window/sequence
+			dec_logsigma = dec_logsigma[:, -1:, :].permute(1, 0, 2)  # [1, B, N], for AD only give back last element of window/sequence
+			return dec_mu, dec_logsigma
+		else:
+			# dec_out = dec_out[:, :, :]  # [B, 1, N], for AD only give back last element of window/sequence
+			# out = dec_out.permute(1, 0, 2)  # [1, B, N], permute to have same output structure as other models
+			out = dec_out
+			return out

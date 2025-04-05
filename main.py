@@ -8,7 +8,7 @@ from pprint import pprint
 from torchinfo import summary
 
 from src.constants import *
-from src.plotting import plot_accuracies, plot_labels, plot_losses, plotter, plotter2, compare_labels
+from src.plotting import plot_accuracies, plot_labels, plot_losses, plotter, plotter2, compare_labels, plot_correlation_anomalyscore
 # from src.pot import SPOT
 from src.dlutils import ComputeLoss
 from src.utils import load_model, save_model, EarlyStopper
@@ -272,7 +272,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, los
 				return loss.detach().numpy(), z_all.detach().numpy()
 			else:
 				return loss.detach().numpy()
-	elif 'iTransformer' in model.name:
+	elif 'iTransformer' in model.name or 'Transformer' in model.name:
 		if lossname == 'MSE':
 			l = nn.MSELoss(reduction = 'none')
 		elif lossname == 'Huber':
@@ -514,8 +514,8 @@ if __name__ == '__main__':
 	if args.model in ['MERLIN']:
 		data_loader_test = DataLoader(test, batch_size=24, shuffle=False)
 		eval(f'run_{args.model.lower()}(data_loader_test, labels, args.dataset)')
-	model, optimizer, scheduler, epoch, accuracy_list = \
-		load_model(args.model, args.dataset, feats, args.window_size, args.step_size, args.d_model, args.test, checkpoints_path, args.loss, args.prob, args.weighted)
+	model, optimizer, scheduler, epoch, accuracy_list = load_model(args.model, args.dataset, feats, 
+			args.window_size, args.step_size, args.d_model, args.test, checkpoints_path, args.loss, args.prob)
 
 	# Calculate and print the number of parameters
 	total_params = sum(p.numel() for p in model.parameters())
@@ -548,12 +548,12 @@ if __name__ == '__main__':
 
 		sample_batch = next(iter(data_loader_train))
 		f.write('\nModel Summary:\n')
-		# if model.name == 'TranAD':
-		# 	window = sample_batch.permute(1, 0, 2)
-		# 	elem = window[-1, :, :].view(1, -1, feats)
-		# 	f.write(str(summary(model, input_data=[window, elem], depth=5, verbose=0)))
-		# else:
-		# 	f.write(str(summary(model, input_data=sample_batch, depth=5, verbose=0)))
+		if model.name == 'TranAD':
+			window = sample_batch.permute(1, 0, 2)
+			elem = window[-1, :, :].view(1, -1, feats)
+			f.write(str(summary(model, input_data=[window, elem], depth=5, verbose=0)))
+		else:
+			f.write(str(summary(model, input_data=sample_batch, depth=5, verbose=0)))
 		
 	### Training phase
 	if not args.test:
@@ -598,12 +598,16 @@ if __name__ == '__main__':
 	print(f'{color.HEADER}Testing {args.model} on {args.dataset}{color.ENDC}')
 
 	### Scores
-	lossT = backprop(-1, model, data_loader_train_test, feats, optimizer, scheduler, 
-				  training=False, lossname=args.loss, enc_feats=enc_feats, prob=args.prob, pred=False)  # need anomaly scores on training data for POT
+	# lossT = backprop(-1, model, data_loader_train_test, feats, optimizer, scheduler, 
+	# 			  training=False, lossname=args.loss, enc_feats=enc_feats, prob=args.prob, pred=False)  # need anomaly scores on training data for POT
 	if args.loss in ['Huber_quant', 'penalty']:
+		lossT, _, y25T, y75T = backprop(-1, model, data_loader_train_test, feats, optimizer, scheduler, 
+								training=False, lossname=args.loss, enc_feats=enc_feats, prob=args.prob, pred=True)  # need anomaly scores on training data for POT
 		loss, y_pred, y25, y75 = backprop(-1, model, data_loader_test, feats, optimizer, scheduler, 
-									training=False, lossname=args.loss, enc_feats=enc_feats, prob=args.prob, pred=True)	
+								training=False, lossname=args.loss, enc_feats=enc_feats, prob=args.prob, pred=True)	
 	else:
+		lossT = backprop(-1, model, data_loader_train_test, feats, optimizer, scheduler, 
+				  training=False, lossname=args.loss, enc_feats=enc_feats, prob=args.prob, pred=False)  # need anomaly scores on training data for POT
 		loss, y_pred = backprop(-1, model, data_loader_test, feats, optimizer, scheduler, 
 						  training=False, lossname=args.loss, enc_feats=enc_feats, prob=args.prob, pred=True)
 
@@ -652,10 +656,10 @@ if __name__ == '__main__':
 		plotter(plot_path, testOO, y_pred, loss, nolabels, test.get_ideal_lengths(), name='output_padded')
 	
 	print(lossT.shape, loss.shape, labels.shape)
-	if 'iTransformer' in model.name or model.name in ['LSTM_AE']:
+	if 'iTransformer' in model.name or model.name in ['LSTM_AE', 'Transformer']:
 		# cut out the padding from test data, loss tensors
 		lossT_tmp, loss_tmp, y_pred_tmp = [], [], []
-		y25_tmp, y75_tmp = [], []
+		y25_tmp, y75_tmp, y25T_tmp, y75T_tmp = [], [], [], []
 		print(test.get_ts_lengths(), np.sum(test.get_ts_lengths()), len(test.get_ts_lengths()))
 		print(test.get_ideal_lengths(), np.sum(test.get_ideal_lengths()), len(test.get_ideal_lengths()))
 		start = 0
@@ -670,6 +674,9 @@ if __name__ == '__main__':
 		start = 0
 		for i, l in enumerate(train_test.get_ts_lengths()):
 			lossT_tmp.append(lossT[start:start+l])
+			if args.loss in ['Huber_quant', 'penalty']:
+				y25T_tmp.append(y25[start:start+l])
+				y75T_tmp.append(y75[start:start+l])
 			start += train_test.get_ideal_lengths()[i]
 
 		lossT = np.concatenate(lossT_tmp, axis=0)
@@ -678,6 +685,8 @@ if __name__ == '__main__':
 		if args.loss in ['Huber_quant', 'penalty']:
 			y25 = np.concatenate(y25_tmp, axis=0)
 			y75 = np.concatenate(y75_tmp, axis=0)
+			y25T = np.concatenate(y25T_tmp, axis=0)
+			y75T = np.concatenate(y75T_tmp, axis=0)
 	print(lossT.shape, loss.shape, labels.shape)
 	train_loss = np.mean(lossT)
 	test_loss = np.mean(loss)
@@ -694,6 +703,15 @@ if __name__ == '__main__':
 	# 	nb_windows = (len(labels) - args.window_size) // args.step_size
 	# 	labels = np.array([(np.sum(labels[i*args.step_size:i*args.step_size+args.window_size], axis=0) >= 1) + 0 for i in range(nb_windows)])
 	# 	print(labels.shape, labels[labels[:,0]==1].shape, labels[labels[:,0]==0].shape)
+
+
+	## test using IQR as anomaly score
+	# loss = np.abs(y75 - y25)
+	# IQR_50 = np.abs(y75 - y25)
+	# print(np.max(loss), np.min(loss))
+	# lossT = np.abs(y75T - y25T)
+
+	# plot_correlation_anomalyscore(loss, IQR_50, labels, plot_path)
 
 	### anomaly labels
 	preds, df_res_local = local_pot(loss, lossT, labels, args.q, plot_path)
@@ -717,6 +735,25 @@ if __name__ == '__main__':
 	results_all.index = nb_adim
 	results_all.to_csv(f'{res_path}/res_local_all.csv')
 
+	# # global anomaly labels with weighted average
+	# if args.loss in ['Huber_quant', 'penalty']:
+	# 	IQR_50T = np.abs(y75T - y25T)
+	# 	factorsT = 1 / IQR_50T
+	# 	normT = np.mean(factorsT, axis=0)
+	# 	print(normT.shape, factorsT.shape)
+	# 	factorsT = factorsT / normT
+	# 	divT = lossT * factorsT 
+	# 	IQR_50 = np.abs(y75 - y25)
+	# 	factors = 1 / IQR_50
+	# 	norm = np.sum(factors, axis=1)
+	# 	factors = factors / norm[:, np.newaxis]
+	# 	div = loss * factors
+	# 	lossTfinal_weighted, lossFinal_weighted = np.sum(divT, axis=1), np.mean(div, axis=1)
+	# 	true_labels = (np.sum(labels, axis=1) >= 1) + 0
+	# 	result_global_weighted, pred2 = pot_eval(lossTfinal_weighted, lossFinal_weighted, 
+	# 							  true_labels, plot_path, f'all_dim_weighted', q=args.q)
+	# 	labelspred_glob_weighted = (pred2 >= 1) + 0
+		
 	# global anomaly labels
 	lossTfinal, lossFinal = np.mean(lossT, axis=1), np.mean(loss, axis=1)
 	true_labels = (np.sum(labels, axis=1) >= 1) + 0
@@ -734,8 +771,8 @@ if __name__ == '__main__':
 	print('\nglobal results') 
 	pprint(result_global)
 
-	plot_metrics(plot_path, ['local (incl. OR)', 'local (maj. voting)', 'global'], 
-			  y_pred=[labelspred, labelspred_maj, labelspred_glob], y_true=true_labels)
+	plot_metrics(plot_path, ['local (incl. OR)', 'local (maj. voting)', 'global', 'global weighted'], 
+			  y_pred=[labelspred, labelspred_maj, labelspred_glob], y_true=true_labels) #labelspred_glob_weighted
 
 	# compare local & global anomaly labels
 	compare_labels(plot_path, pred_labels=[labelspred, labelspred_maj, labelspred_glob], true_labels=true_labels, 
@@ -747,6 +784,7 @@ if __name__ == '__main__':
 			plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred, labels, name='_local_or')
 			plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred_maj, labels, name='_local_maj')
 			plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred_glob, labels, name='_global')
+			# plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred_glob_weighted, labels, name='_global_weighted')
 		else:
 			plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred, labels, name='_local_or')
 			plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred_maj, labels, name='_local_maj')
@@ -759,8 +797,13 @@ if __name__ == '__main__':
 	result_local2 = pd.DataFrame.from_dict(result_local2, orient='index').T
 	result_local1.index = ['local_all']
 	result_local2.index = ['local_all_maj']
-	df_res_local = pd.concat([df_res_local, result_local1, result_local2])
-	df_res = pd.concat([df_res_local, df_res_global]) 
+	if args.loss in ['Huber_quant', 'penalty']:
+		result_global_weighted = pd.DataFrame.from_dict(result_global_weighted, orient='index').T
+		result_global_weighted.index = ['global_weighted']
+		df_res_local = pd.concat([df_res_local, result_local1, result_local2, result_global_weighted])
+	else:
+		df_res_local = pd.concat([df_res_local, result_local1, result_local2])
+	df_res = pd.concat([df_res_local, df_res_global])
 	df_labels = pd.DataFrame( {'local_or': labelspred, 'local_maj': labelspred_maj, 'global': labelspred_glob} )
 
 	df_res.to_csv(f'{res_path}/res.csv')	

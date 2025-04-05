@@ -159,6 +159,7 @@ Merlin*/*
 DAGMM*/*
 IF*/*
 None*/*
+Transformer/*
 *ATLAS_TS*/*
 *.csv
 data/*

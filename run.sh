@@ -89,12 +89,12 @@ kfold=-1
 epochs=10
 feats=-1
 
-for i in {1..5}
+for i in 1
 do
     # python main.py --model iTransformer --dataset creditcard_normal -w 10 -s 1 -d 2 -e $epochs --feats $feats\
     # --loss Huber --k $i --name testMSE/rep_$i --test --checkpoint iTransformer_loss_fct/iTransformer_creditcard_normal/window10_steps1_dmodel2_feats-1_eps10_Huber/rep_$i/checkpoints/ > iTransformer/creditcard_normal_Huber_MSEtest$i.log
     python main.py --model iTransformer --dataset GECCO_normal -w 12 -s 1 -d 2 -e $epochs --feats $feats\
-    --loss Huber_quant --k $i --name testMSE/rep_$i --test --checkpoint iTransformer_loss_fct/iTransformer_GECCO_normal/window12_steps1_dmodel2_feats-1_eps10_Huber_quanr/rep_$i/checkpoints/ > iTransformer/GECCO_normal_Huber_quant_MSEtest$i.log
+    --loss Huber_quant --k $i --name IQRloss_rep_$i --test --checkpoint iTransformer_loss_fct/iTransformer_GECCO_normal/window12_steps1_dmodel2_feats-1_eps10_Huber_quant/rep_$i/checkpoints/ # > iTransformer/GECCO_normal_Huber_quant_MSEtest$i.log
     # python main.py --model iTransformer --dataset IEEECIS_new2.2 -w 10 -s 1 -d 2 -e $epochs --feats 30\
     # --loss Huber --k $i --name testMSE/rep_$i --test --checkpoint iTransformer_loss_fct/iTransformer_IEEECIS_new2.2/window10_steps1_dmodel2_feats30_eps10_Huber/rep_$i/checkpoints/ > iTransformer/IEEECIS_new2.2_Huber_MSEtest$i.log
     # python main.py --model iTransformer --dataset MSL_new -w 96 -s 10 -d 96 -e $epochs --feats $feats\
