@@ -6,6 +6,7 @@ import torch.nn as nn
 from time import time
 from pprint import pprint
 from torchinfo import summary
+from tslearn.metrics import SoftDTWLossPyTorch
 
 from src.constants import *
 from src.plotting import plot_accuracies, plot_labels, plot_losses, plotter, plotter2, compare_labels, plot_correlation_anomalyscore
@@ -16,6 +17,7 @@ from src.diagnosis import hit_att, ndcg
 from src.merlin import *
 from src.utils import combined_loss
 from src.data_loader import MyDataset
+from src.soft_dtw_cuda import SoftDTW
 
 
 def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, lossname='MSE', enc_feats=0, prob=False, pred=False):
@@ -281,6 +283,11 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, los
 			l = combined_loss(model.window_size, penalty=False)
 		elif lossname == 'penalty':
 			l = combined_loss(model.window_size, penalty=True)
+		elif lossname == 'softdtw':
+			l = SoftDTW(use_cuda=torch.cuda.is_available(), normalize=True)
+			# l = SoftDTWLossPyTorch(normalize=False)
+		elif lossname == 'softdtw_norm':
+			l = SoftDTWLossPyTorch(normalize=True)
 		else:
 			raise ValueError('Loss function not implemented')
 		n = epoch + 1
@@ -378,6 +385,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, los
 					# z_all = torch.cat((z_all, z.reshape(-1, feats)), dim=0)
 			if not model.weighted:
 				loss = loss.view(-1, feats)
+				# loss = loss.unsqueeze(1)
 			# if prob:
 			# 	z_std = torch.exp(z_logsigma)
 			# 	loss = loss / z_std  #+ z_std
@@ -475,13 +483,14 @@ def local_anomaly_labels(preds, labels, q=1e-5, plot_path=None, nb_adim=1):
 
 if __name__ == '__main__':
 	print(args, '\n')
-	print(torch.cuda.is_available())
+	print('CUDA available:', torch.cuda.is_available())
+	print("MPS (Apple Silicon GPU) is available:", torch.backends.mps.is_available(), '\n')
 
 	# define path for results, checkpoints & plots & create directories
 	if args.name:
-		folder = f'{args.model}/{args.model}_{args.dataset}/window{args.window_size}_steps{args.step_size}_dmodel{args.d_model}_feats{args.feats}_eps{args.epochs}_{args.loss}/{args.name}'
+		folder = f'{args.model}_new/{args.model}_{args.dataset}/window{args.window_size}_steps{args.step_size}_dmodel{args.d_model}_feats{args.feats}_eps{args.epochs}_{args.loss}/{args.name}'
 	else:
-		folder = f'{args.model}/{args.model}_{args.dataset}/window{args.window_size}_steps{args.step_size}_dmodel{args.d_model}_feats{args.feats}_eps{args.epochs}_{args.loss}'
+		folder = f'{args.model}_new/{args.model}_{args.dataset}/window{args.window_size}_steps{args.step_size}_dmodel{args.d_model}_feats{args.feats}_eps{args.epochs}_{args.loss}'
 	plot_path = f'{folder}/plots'
 	res_path = f'{folder}/results'
 	if args.checkpoint is None:
@@ -576,7 +585,7 @@ if __name__ == '__main__':
 				lossV = 0
 			tqdm.write(f'Epoch {e},\tL_train = {lossT}, \t\tL_valid = {lossV}, \tLR = {lr}')
 			accuracy_list.append((lossT, lossV, lr))
-			save_model(checkpoints_path, model, optimizer, scheduler, e, accuracy_list, f'_epoch{e}')
+			# save_model(checkpoints_path, model, optimizer, scheduler, e, accuracy_list, f'_epoch{e}')
 			if args.k > 0 and early_stopper.early_stop(-lossV):
 				print(f'{color.HEADER}Early stopping at epoch {e}{color.ENDC}')
 				break
@@ -601,7 +610,7 @@ if __name__ == '__main__':
 	# lossT = backprop(-1, model, data_loader_train_test, feats, optimizer, scheduler, 
 	# 			  training=False, lossname=args.loss, enc_feats=enc_feats, prob=args.prob, pred=False)  # need anomaly scores on training data for POT
 	if args.loss in ['Huber_quant', 'penalty']:
-		lossT, _, y25T, y75T = backprop(-1, model, data_loader_train_test, feats, optimizer, scheduler, 
+		lossT, yT, y25T, y75T = backprop(-1, model, data_loader_train_test, feats, optimizer, scheduler, 
 								training=False, lossname=args.loss, enc_feats=enc_feats, prob=args.prob, pred=True)  # need anomaly scores on training data for POT
 		loss, y_pred, y25, y75 = backprop(-1, model, data_loader_test, feats, optimizer, scheduler, 
 								training=False, lossname=args.loss, enc_feats=enc_feats, prob=args.prob, pred=True)	
@@ -658,7 +667,7 @@ if __name__ == '__main__':
 	print(lossT.shape, loss.shape, labels.shape)
 	if 'iTransformer' in model.name or model.name in ['LSTM_AE', 'Transformer']:
 		# cut out the padding from test data, loss tensors
-		lossT_tmp, loss_tmp, y_pred_tmp = [], [], []
+		lossT_tmp, loss_tmp, y_pred_tmp, yT_tmp = [], [], [], []
 		y25_tmp, y75_tmp, y25T_tmp, y75T_tmp = [], [], [], []
 		print(test.get_ts_lengths(), np.sum(test.get_ts_lengths()), len(test.get_ts_lengths()))
 		print(test.get_ideal_lengths(), np.sum(test.get_ideal_lengths()), len(test.get_ideal_lengths()))
@@ -675,6 +684,7 @@ if __name__ == '__main__':
 		for i, l in enumerate(train_test.get_ts_lengths()):
 			lossT_tmp.append(lossT[start:start+l])
 			if args.loss in ['Huber_quant', 'penalty']:
+				yT_tmp.append(yT[start:start+l])
 				y25T_tmp.append(y25[start:start+l])
 				y75T_tmp.append(y75[start:start+l])
 			start += train_test.get_ideal_lengths()[i]
@@ -683,6 +693,7 @@ if __name__ == '__main__':
 		loss = np.concatenate(loss_tmp, axis=0)
 		y_pred = np.concatenate(y_pred_tmp, axis=0)
 		if args.loss in ['Huber_quant', 'penalty']:
+			yT = np.concatenate(yT_tmp, axis=0)
 			y25 = np.concatenate(y25_tmp, axis=0)
 			y75 = np.concatenate(y75_tmp, axis=0)
 			y25T = np.concatenate(y25T_tmp, axis=0)
@@ -692,10 +703,10 @@ if __name__ == '__main__':
 	test_loss = np.mean(loss)
 
 	### Plot curves
-	if feats <= 40:
-		testO = test.get_complete_data()
-		print(len(testO), len(y_pred), len(labels))
-		plotter(plot_path, testO, y_pred, loss, labels, test.get_ts_lengths(), name='output')
+	# if feats <= 40:
+	testO = test.get_complete_data()
+	print(len(testO), len(y_pred), len(labels))
+	plotter(plot_path, testO, y_pred, loss, labels, test.get_ts_lengths(), name='output')
 
 	# # if step_size > 1, define truth labels per window instead of per time stamp, can also just use non-overlapping windows for testing
 	# if args.step_size > 1:
@@ -705,13 +716,32 @@ if __name__ == '__main__':
 	# 	print(labels.shape, labels[labels[:,0]==1].shape, labels[labels[:,0]==0].shape)
 
 
-	## test using IQR as anomaly score
-	# loss = np.abs(y75 - y25)
-	# IQR_50 = np.abs(y75 - y25)
-	# print(np.max(loss), np.min(loss))
-	# lossT = np.abs(y75T - y25T)
+	# test using IQR as anomaly score
 
-	# plot_correlation_anomalyscore(loss, IQR_50, labels, plot_path)
+	# IQR_50 = np.abs(y75 - y25) 
+	# IQR_50T = np.abs(y75T - y25T)
+	# plot_correlation_anomalyscore(loss, IQR_50, labels, plot_path, name='norm0')
+	# IQR_50 = (np.abs(y75 - y25) / 2) **2
+	# IQR_50 /= np.max(IQR_50)
+	# IQR_50 = np.maximum( np.abs(y_pred-y75), np.abs(y_pred-y25) )
+	# IQR_50T = np.maximum( np.abs(yT-y75T), np.abs(yT-y25T) )
+	# IQR_50T /= np.max(IQR_50T)
+	# loss += IQR_50/2
+	# lossT += IQR_50T/2
+	# plot_correlation_anomalyscore(loss, IQR_50, labels, plot_path, name='norm1')
+	# IQR_50 = np.maximum( np.abs(y_pred-y75), np.abs(y_pred-y25))
+	# plot_correlation_anomalyscore(loss, IQR_50, labels, plot_path, name='norm2')
+	# IQR_50 = np.minimum( np.abs(y_pred-y75), np.abs(y_pred-y25))
+	# plot_correlation_anomalyscore(loss, IQR_50, labels, plot_path, name='norm3')
+
+	# plot_correlation_anomalyscore(loss, IQR_50, labels, plot_path, name='new')
+
+	# loss = np.abs(y75 - y25)
+	# loss = np.maximum( np.abs(y_pred-y75), np.abs(y_pred-y25) )
+	# lossT = np.abs(y75T - y25T)
+	# lossT = np.maximum( np.abs(yT-y75T), np.abs(yT-y25T) )
+
+
 
 	### anomaly labels
 	preds, df_res_local = local_pot(loss, lossT, labels, args.q, plot_path)
@@ -735,24 +765,24 @@ if __name__ == '__main__':
 	results_all.index = nb_adim
 	results_all.to_csv(f'{res_path}/res_local_all.csv')
 
-	# # global anomaly labels with weighted average
-	# if args.loss in ['Huber_quant', 'penalty']:
-	# 	IQR_50T = np.abs(y75T - y25T)
-	# 	factorsT = 1 / IQR_50T
-	# 	normT = np.mean(factorsT, axis=0)
-	# 	print(normT.shape, factorsT.shape)
-	# 	factorsT = factorsT / normT
-	# 	divT = lossT * factorsT 
-	# 	IQR_50 = np.abs(y75 - y25)
-	# 	factors = 1 / IQR_50
-	# 	norm = np.sum(factors, axis=1)
-	# 	factors = factors / norm[:, np.newaxis]
-	# 	div = loss * factors
-	# 	lossTfinal_weighted, lossFinal_weighted = np.sum(divT, axis=1), np.mean(div, axis=1)
-	# 	true_labels = (np.sum(labels, axis=1) >= 1) + 0
-	# 	result_global_weighted, pred2 = pot_eval(lossTfinal_weighted, lossFinal_weighted, 
-	# 							  true_labels, plot_path, f'all_dim_weighted', q=args.q)
-	# 	labelspred_glob_weighted = (pred2 >= 1) + 0
+	# global anomaly labels with weighted average
+	if args.loss in ['Huber_quant', 'penalty']:
+		IQR_50T = np.abs(y75T - y25T)
+		factorsT = 1 / IQR_50T
+		normT = np.mean(factorsT, axis=0)
+		print(normT.shape, factorsT.shape)
+		factorsT = factorsT / normT
+		divT = lossT * factorsT 
+		IQR_50 = np.abs(y75 - y25)
+		factors = 1 / IQR_50
+		norm = np.sum(factors, axis=1)
+		factors = factors / norm[:, np.newaxis]
+		div = loss * factors
+		lossTfinal_weighted, lossFinal_weighted = np.sum(divT, axis=1), np.mean(div, axis=1)
+		true_labels = (np.sum(labels, axis=1) >= 1) + 0
+		result_global_weighted, pred2 = pot_eval(lossTfinal_weighted, lossFinal_weighted, 
+								  true_labels, plot_path, f'all_dim_weighted', q=args.q)
+		labelspred_glob_weighted = (pred2 >= 1) + 0
 		
 	# global anomaly labels
 	lossTfinal, lossFinal = np.mean(lossT, axis=1), np.mean(loss, axis=1)
@@ -779,16 +809,16 @@ if __name__ == '__main__':
 				plot_labels=['Local anomaly\n(inclusive OR)', 'Local anomaly\n(majority voting)', 'Global anomaly'], 
 				name='_all')
 	
-	if feats <= 40:
-		if args.loss in ['Huber_quant', 'penalty']:
-			plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred, labels, name='_local_or')
-			plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred_maj, labels, name='_local_maj')
-			plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred_glob, labels, name='_global')
-			# plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred_glob_weighted, labels, name='_global_weighted')
-		else:
-			plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred, labels, name='_local_or')
-			plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred_maj, labels, name='_local_maj')
-			plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred_glob, labels, name='_global')
+	# if feats <= 40:
+	if args.loss in ['Huber_quant', 'penalty']:
+		plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred, labels, name='_local_or')
+		plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred_maj, labels, name='_local_maj')
+		plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred_glob, labels, name='_global')
+		# plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred_glob_weighted, labels, name='_global_weighted')
+	else:
+		plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred, labels, name='_local_or')
+		plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred_maj, labels, name='_local_maj')
+		plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred_glob, labels, name='_global')
 
 	# saving results
 	df_res_global = pd.DataFrame.from_dict(result_global, orient='index').T
@@ -808,3 +838,10 @@ if __name__ == '__main__':
 
 	df_res.to_csv(f'{res_path}/res.csv')	
 	df_labels.to_csv(f'{res_path}/pred_labels.csv', index=False)
+
+	# np.save(f'{res_path}/y_pred.npy', y_pred)
+	# np.save(f'{res_path}/y_true.npy', testO)
+	# np.save(f'{res_path}/y25_pred.npy', y25)
+	# np.save(f'{res_path}/y75_pred.npy', y75)
+	# np.save(f'{res_path}/pred_labelsMSE.npy', labelspred)
+	# np.save(f'{res_path}/true_labels.npy', true_labels)

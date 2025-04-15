@@ -95,7 +95,8 @@ def plotter(path, y_true, y_pred, ascore, labels, ts_length=[], name='output'):
 	os.makedirs(path, exist_ok=True)
 	# if 'TranAD' in path: y_true = torch.roll(y_true, 1, 0)
 	pdf = PdfPages(f'{path}/{name}.pdf')
-	for dim in range(y_true.shape[1]):
+	dims = min(y_true.shape[1], 30)  # because we limit plot at 30 features
+	for dim in range(dims):
 		y_t, y_p, l, a_s = y_true[:, dim], y_pred[:, dim], labels[:, dim], ascore[:, dim]
 		fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(12, 6), constrained_layout=True)
 		ax1.set_ylabel('Value', labelpad=20, ha='center', va='center')
@@ -135,7 +136,8 @@ def plotter2(path, x_true, x_pred, ascore, dataset, y_pred=None, y=None, name=''
 		features = features_dict[dataset]
 	else:
 		features = [f'Dim {i}' for i in range(x_true.shape[1])]
-	dims = len(features) + 1  # because we plot ascore in the second last dimension
+	plot_dims = min(len(features), 30)  # because we limit plot at 30 features
+	dims = min(len(features) + 1, 31)  # because we plot ascore in the second last dimension
 	if y is not None and y_pred is not None:
 		dims += 2
 	size = int(dims * 1.3)
@@ -149,12 +151,12 @@ def plotter2(path, x_true, x_pred, ascore, dataset, y_pred=None, y=None, name=''
 		# add_atlas(axs[0], ['Data October 2023, 'r'$\sqrt{s_{NN}}= 5.36$'' TeV', 'HardProbes stream'])  
 		# add_atlas(axs[0], ['Data August 2022, 'r'$\sqrt{s_{NN}}= 13.6$'' TeV', 'Main stream'])  # hvononNominal
 		add_atlas(axs[0], ['Data May 2023, 'r'$\sqrt{s_{NN}}= 13.6$'' TeV', 'Main stream'])  # pumpNoise
-	for dim, feat in enumerate(features):  # iterate through the features we're using
+	for dim in range(plot_dims):  # iterate through the features we're using
 		axs[dim].plot(x_true[:, dim], label='True')
 		axs[dim].plot(x_pred[:, dim], '--', label='Predicted')
 		if x25 is not None and x75 is not None:
 			axs[dim].fill_between(np.arange(x_pred.shape[0]), x25[:, dim], x75[:, dim], color='tab:orange', alpha=0.4)
-		axs[dim].set_ylabel(feat, rotation=0, ha='right', rotation_mode='default', labelpad=5)
+		axs[dim].set_ylabel(features[dim], rotation=0, ha='right', rotation_mode='default', labelpad=5)
 		axs[dim].yaxis.set_label_coords(-0.1, 0.5)
 		if 'ATLAS' in dataset:
 			axs[dim].set_ylim(-1, 1)
@@ -307,22 +309,100 @@ def compare_labels(path, pred_labels, true_labels, plot_labels, name=''):
 	plt.savefig(f'{path}/compare_labels2{name}.png', dpi=100)
 	plt.close()
         
-def plot_correlation_anomalyscore(loss, IQR, labels, path):
+def plot_correlation_anomalyscore(loss, IQR, labels, path, name=None):
 	os.makedirs(path, exist_ok=True)
 
 	loss = np.average(loss, axis=1)
+	# loss = loss.reshape(1, -1)
 	loss /= np.max(loss)
 	IQR = np.average(IQR, axis=1) 
+	# IQR = IQR.reshape(1, -1)
 	IQR /= np.max(IQR)
 	labels = (np.sum(labels, axis=1) >= 1) + 0
-	
+	# labels = labels.reshape(1, -1)
+	# print('pearson corr coef loss + IQR:', np.mean(np.corrcoef(loss, IQR)))
+	# print('pearson corr coef loss + labels:', np.mean(np.corrcoef(loss, labels)))
+	# print('pearson corr coef IQR + labels:', np.mean(np.corrcoef(IQR, labels)))
+
+	corr_loss_IQR = np.corrcoef(loss, IQR, rowvar=False)
+	plt.imshow(corr_loss_IQR, cmap='coolwarm', vmin=-1, vmax=1)
+	plt.colorbar(label='Correlation Coefficient')
+	plt.xlabel('Test loss')
+	plt.ylabel('IQR')
+	plt.savefig(f'{path}/corr_loss_IQR{name}.png', dpi=100)
+	plt.close()
+
+	# corr_loss_labels = np.corrcoef(loss, labels)
+	# plt.imshow(corr_loss_labels, cmap='coolwarm', vmin=-1, vmax=1)
+	# plt.colorbar(label='Correlation Coefficient')
+	# plt.xlabel('Test loss (MSE)')
+	# plt.ylabel('Anomaly label')
+	# plt.savefig(f'{path}/corr_loss_labels.png', dpi=100)
+	# plt.close()
+
+	# corr_IQR_labels = np.corrcoef(IQR, labels)
+	# plt.imshow(corr_IQR_labels, cmap='coolwarm', vmin=-1, vmax=1)
+	# plt.colorbar(label='Correlation Coefficient')	
+	# plt.xlabel('IQR')
+	# plt.ylabel('Anomaly label')
+	# plt.savefig(f'{path}/corr_IQR_labels.png', dpi=100)
+	# plt.close()
+
 	# Scatter plot for test loss
 	plt.figure(figsize=(7, 6))
-	plt.scatter(loss, IQR, c=labels, cmap='coolwarm')
-	# plt.hist(loss, bins=100, alpha=0.5, label='Test Loss', density=True)
-	plt.colorbar(label='Anomaly Label')
+	plt.scatter(loss[labels==0], IQR[labels==0], c='blue', alpha=0.6, label='Labels = 0')
+	plt.scatter(loss[labels==1], IQR[labels==1], c='red', label='Labels = 1')
+	# plt.scatter(loss, IQR, c=labels, cmap='coolwarm', alpha=0.2)
+	# plt.colorbar(label='Anomaly Label')
+	plt.legend(loc='upper right', frameon=True)
 	plt.ylabel('IQR')
-	plt.xlabel('Test Loss')
+	plt.xlabel('Test loss')
 	plt.tight_layout()
-	plt.savefig(f'{path}/loss_test.png', dpi=100)
+	if name:
+		plt.savefig(f'{path}/loss_vs_IQR{name}.png', dpi=100)
 	plt.close()
+
+	# Histograms for IQR using plt.subplots
+	fig, axs = plt.subplots(1, 2, figsize=(12, 6), sharey=True, sharex=True)
+
+	# Histogram for IQR where labels == 0
+	axs[0].hist(IQR[labels == 0], bins=30, color='blue', alpha=0.7, label='Labels = 0', density=True)
+	axs[0].set_xlabel('IQR')
+	axs[0].set_ylabel('Frequency')
+	axs[0].set_title('IQR for Labels = 0')
+	axs[0].legend()
+
+	# Histogram for IQR where labels == 1
+	axs[1].hist(IQR[labels == 1], bins=30, color='red', alpha=0.7, label='Labels = 1', density=True)
+	axs[1].set_xlabel('IQR')
+	axs[1].set_ylabel('Frequency')
+	axs[1].set_title('IQR for Labels = 1')
+	axs[1].legend()
+
+	plt.tight_layout()
+	if name:
+		plt.savefig(f'{path}/iqr{name}_histograms.png', dpi=100)
+	plt.close()
+
+	# Histograms for loss using plt.subplots
+	fig, axs = plt.subplots(1, 2, figsize=(12, 6), sharey=True, sharex=True)
+
+	# Histogram for IQR where labels == 0
+	axs[0].hist(loss[IQR <= 0.25], bins=30, color='blue', alpha=0.7, label=r'IQR $\leq 0.25$', density=True)
+	axs[0].set_xlabel('Test loss')
+	axs[0].set_ylabel('Frequency')
+	axs[0].set_title(r'Test loss for IQR $\leq 0.25$')
+	axs[0].legend()
+
+	# Histogram for IQR where labels == 1
+	axs[1].hist(loss[IQR > 0.25], bins=30, color='blue', alpha=0.7, label='IQR > 0.25', density=True)
+	axs[1].set_xlabel('Test loss')
+	axs[1].set_ylabel('Frequency')
+	axs[0].set_title(r'Test loss for IQR $> 0.25$')
+	axs[1].legend()
+
+	plt.tight_layout()
+	if name:
+		plt.savefig(f'{path}/loss{name}_histograms.png', dpi=100)
+	plt.close()
+
