@@ -139,7 +139,11 @@ def pot_eval(init_score, score, label, path='./plots', name='pot_plot', q=1e-5, 
             s = SPOT(q)  # SPOT object
             s.fit(init_score, score)  # data import
             s.initialize(level=lms, min_extrema=False, verbose=False)  # initialization step
-        except: lms = lms * 0.999
+        except: 
+            lms = lms * 0.999
+            if lms < 1e-5:
+                print('POT failed')
+                return None, None
         else: break
     ret = s.run(dynamic=False)  # run
     # print(len(ret['alarms']))

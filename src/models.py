@@ -206,14 +206,15 @@ class OmniAnomaly(nn.Module):
 
 ## USAD Model (KDD 20)
 class USAD(nn.Module):
-	def __init__(self, feats,  window_size=None, prob=False):
+	def __init__(self, feats,  window_size=5, prob=False):
 		super(USAD, self).__init__()
 		self.name = 'USAD'
 		self.lr = 0.0001
 		self.n_feats = feats
 		self.n_hidden = 16
 		self.n_latent = 5
-		self.window_size = 5 # USAD w_size = 5
+		self.batch = 1
+		self.window_size = window_size # USAD w_size = 5
 		self.n = self.n_feats * self.window_size
 		self.encoder = nn.Sequential(
 			nn.Flatten(),

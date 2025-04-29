@@ -183,6 +183,7 @@ def plotter2(path, x_true, x_pred, ascore, dataset, y_pred=None, y=None, name=''
 		axs[-1].set_xlabel('Transactions')
 	else:
 		axs[-1].set_xlabel('Timestamp')
+	plt.grid(axis='x', color='gray')
 	fig.savefig(f'{path}/output2{name}.png', dpi=300, facecolor='white')
 	plt.close()
 
@@ -313,16 +314,10 @@ def plot_correlation_anomalyscore(loss, IQR, labels, path, name=None):
 	os.makedirs(path, exist_ok=True)
 
 	loss = np.average(loss, axis=1)
-	# loss = loss.reshape(1, -1)
 	loss /= np.max(loss)
 	IQR = np.average(IQR, axis=1) 
-	# IQR = IQR.reshape(1, -1)
 	IQR /= np.max(IQR)
 	labels = (np.sum(labels, axis=1) >= 1) + 0
-	# labels = labels.reshape(1, -1)
-	# print('pearson corr coef loss + IQR:', np.mean(np.corrcoef(loss, IQR)))
-	# print('pearson corr coef loss + labels:', np.mean(np.corrcoef(loss, labels)))
-	# print('pearson corr coef IQR + labels:', np.mean(np.corrcoef(IQR, labels)))
 
 	corr_loss_IQR = np.corrcoef(loss, IQR, rowvar=False)
 	plt.imshow(corr_loss_IQR, cmap='coolwarm', vmin=-1, vmax=1)
@@ -331,22 +326,6 @@ def plot_correlation_anomalyscore(loss, IQR, labels, path, name=None):
 	plt.ylabel('IQR')
 	plt.savefig(f'{path}/corr_loss_IQR{name}.png', dpi=100)
 	plt.close()
-
-	# corr_loss_labels = np.corrcoef(loss, labels)
-	# plt.imshow(corr_loss_labels, cmap='coolwarm', vmin=-1, vmax=1)
-	# plt.colorbar(label='Correlation Coefficient')
-	# plt.xlabel('Test loss (MSE)')
-	# plt.ylabel('Anomaly label')
-	# plt.savefig(f'{path}/corr_loss_labels.png', dpi=100)
-	# plt.close()
-
-	# corr_IQR_labels = np.corrcoef(IQR, labels)
-	# plt.imshow(corr_IQR_labels, cmap='coolwarm', vmin=-1, vmax=1)
-	# plt.colorbar(label='Correlation Coefficient')	
-	# plt.xlabel('IQR')
-	# plt.ylabel('Anomaly label')
-	# plt.savefig(f'{path}/corr_IQR_labels.png', dpi=100)
-	# plt.close()
 
 	# Scatter plot for test loss
 	plt.figure(figsize=(7, 6))
@@ -404,5 +383,53 @@ def plot_correlation_anomalyscore(loss, IQR, labels, path, name=None):
 	plt.tight_layout()
 	if name:
 		plt.savefig(f'{path}/loss{name}_histograms.png', dpi=100)
+	plt.close()
+
+def plot_MSE_vs_ascore(path, ascore, labels):
+	os.makedirs(path, exist_ok=True)
+
+	# subplots for every dimension
+	if ascore.ndim != 1:
+		pdf = PdfPages(f'{path}/MSE_vs_ascore_subdim.pdf')
+		for dim in range(ascore.shape[1]):	
+			fig, axs = plt.subplots(1, 1, figsize=(12, 6), constrained_layout=True)
+			axs.scatter(np.arange(len(ascore[:, dim])), y=ascore[:,dim], c=labels, label=['Normal data', 'Anomaly'], alpha=0.5, cmap='coolwarm')
+			axs.set_xlabel('Timestamp')
+			axs.set_ylabel(f'MSE for dim = {dim}')
+			plt.legend()
+			pdf.savefig(fig)
+			plt.close()
+		pdf.close()
+
+	ascore = np.mean(ascore, axis=1)
+	fig = plt.figure(figsize=(17, 6))
+	plt.scatter(np.arange(len(ascore)), y=ascore, c=labels, label=['Normal data', 'Anomaly'], alpha=0.5, cmap='coolwarm')
+	plt.ylabel('MSE')
+	plt.xlabel('Timestamp')
+	plt.legend()
+	plt.tight_layout()
+	plt.savefig(f'{path}/MSE_vs_ascore.png', dpi=100)
+	plt.close()
+
+	fig, axs = plt.subplots(1, 2, figsize=(12, 6), constrained_layout=True, sharex=True, sharey=True)
+	axs[0].hist(ascore[labels==0], bins=50, color='blue', alpha=0.7, label='Normal data', density=True)
+	axs[1].hist(ascore[labels==1], bins=30, color='red', alpha=0.7, label='Anomaly', density=True)
+	axs[0].set_yscale('log')
+	axs[1].set_yscale('log')
+	axs[0].set_title('Normal data')
+	axs[1].set_title('Anomaly')
+	fig.supxlabel(f'MSE')
+	# fig.supylabel('Frequency'
+	fig.suptitle('MSE distribution')
+	plt.savefig(f'{path}/MSE_vs_ascore_histo.png', dpi=100)
+	plt.close()
+
+	fig = plt.figure(figsize=(10, 8))
+	plt.hist(ascore[labels==0], bins=50, color='blue', alpha=0.7, label='Normal data', density=True, histtype='step')
+	plt.hist(ascore[labels==1], bins=30, color='red', alpha=0.7, label='Anomaly', density=True, histtype='step')
+	plt.yscale('log')
+	plt.legend()
+	plt.xlabel(f'MSE')
+	plt.savefig(f'{path}/MSE_vs_ascore_histo2.png', dpi=100)
 	plt.close()
 

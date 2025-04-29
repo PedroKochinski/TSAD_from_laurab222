@@ -69,21 +69,15 @@
 # done
 
 
-# kfold=-1
-# epochs=10
-# feats=-1
-
-
-# # MSL_new
-# python main.py --model iTransformer --dataset MSL_new -w $W_default -s $S_default -d $W_default -e $epochs --feats $feats --k $kfold --name rep_5 --retrain --forecasting 
-# python main.py --model iTransformer --dataset MSL_new -w $W_default -s $S_default -d 19 -e $epochs --feats $feats --k $kfold --name rep_4 --test --forecasting 
-# python main.py --model iTransformer --dataset MSL_new -w $W_default -s $S_default -d 19 -e $epochs --feats $feats --k $kfold --name rep_5 --retrain --forecasting 
-# W_minus=10 
-# python main.py --model iTransformer --dataset MSL_new -w $W_minus -s $S_default -d $W_minus -e $epochs --feats $feats --k $kfold --name rep_5 --test --forecasting
-# python main.py --model iTransformer --dataset MSL_new -w $W_minus -s $S_default -d 2 -e $epochs --feats $feats --k $kfold --name rep_5 --retrain --forecasting
-# SMAP_new
-# python main.py --model iTransformer --dataset SMAP_new -w 15 -s 8 -d 15 -e $epochs --feats $feats --k 4 --name rep_4 --retrain
-
+for d in SWaT_small  # MSL_new
+do
+    echo "data set $d"
+    for i in {1..5}
+    do  
+        echo "rep $i"
+        python main.py --model TranAD --window_size 10 --dataset $d --step_size 1 --epochs 100 --retrain --feats -1 --k $i --name rep_$i 
+    done
+done
 
 # ,dataset,model,max_MCC,max_MCC_mode,window,steps,dmodel,max_MCC_std
 # 1,creditcard,window10_steps1_dmodel2_feats-1_eps10_MSE,0.237,local_all,10,1,2,0.237 $\pm$ 0.016
@@ -99,40 +93,40 @@
 # 8,UCR,window10_steps5_dmodel2_feats-1_eps10,0.775,-,10,5,2,0.775 $\pm$ 0.01
 # 9,WADI,window44_steps4_dmodel44_feats30_eps10,0.825,global,44,4,44,0.825 $\pm$ 0.024
 
-epochs=10
+# epochs=10
 
-for i in {3..5}
-do
-    python main.py --model iTransformer --dataset GECCO_normal -w 12 -s 1 -d 2 -e $epochs --feats -1 --k $i --loss softdtw --name rep_$i --retrain > iTransformer_new/out_GECCO_normal_$i.log
-    python main.py --model iTransformer --dataset IEEECIS_new2.2 -w 10 -s 1 -d 10 -e $epochs --feats 30 --k $i --loss softdtw --name rep_$i --retrain > iTransformer_new/out_IEEECIS_$i.log
-    python main.py --model iTransformer --dataset MSL_new -w 96 -s 10 -d 96 -e $epochs --feats -1 --k $i --loss softdtw --name rep_$i --retrain --less > iTransformer_new/out_MSL_$i.log
-    python main.py --model iTransformer --dataset SMAP_new -w 15 -s 2 -d 15 -e $epochs --feats -1 --k $i --loss softdtw --name rep_$i --retrain > iTransformer_new/out_SMAP_$i.log
-    python main.py --model iTransformer --dataset SMD -w 350 -s 35 -d 70 -e $epochs --feats -1 --k $i --loss softdtw --name rep_$i --retrain --less > iTransformer_new/out_SMD_$i.log
-    python main.py --model iTransformer --dataset SWaT_small -w 51 -s 5 -d 10 -e $epochs --feats -1 --k $i --loss softdtw --name rep_$i --retrain > iTransformer_new/out_SWaT_small_$i.log
-    python main.py --model iTransformer --dataset SWaT_1D -w 10 -s 5 -d 2 -e $epochs --feats -1 --k $i --loss softdtw --name rep_$i --retrain > iTransformer_new/out_SWaT_1D_$i.log
-    python main.py --model iTransformer --dataset UCR -w 10 -s 5 -d 2 -e $epochs --feats -1 --k $i --loss softdtw --name rep_$i --retrain > iTransformer_new/out_UCR_$i.log
-    python main.py --model iTransformer --dataset WADI -w 44 -s 4 -d 44 -e $epochs --feats 30 --k $i --loss softdtw --name rep_$i --retrain --less > iTransformer_new/out_WADI_$i.log
-done
+# for i in {3..5}
+# do
+#     python main.py --model iTransformer --dataset GECCO_normal -w 12 -s 1 -d 2 -e $epochs --feats -1 --k $i --loss softdtw --name rep_$i --retrain > iTransformer_new/out_GECCO_normal_$i.log
+#     python main.py --model iTransformer --dataset IEEECIS_new2.2 -w 10 -s 1 -d 10 -e $epochs --feats 30 --k $i --loss softdtw --name rep_$i --retrain > iTransformer_new/out_IEEECIS_$i.log
+#     python main.py --model iTransformer --dataset MSL_new -w 96 -s 10 -d 96 -e $epochs --feats -1 --k $i --loss softdtw --name rep_$i --retrain --less > iTransformer_new/out_MSL_$i.log
+#     python main.py --model iTransformer --dataset SMAP_new -w 15 -s 2 -d 15 -e $epochs --feats -1 --k $i --loss softdtw --name rep_$i --retrain > iTransformer_new/out_SMAP_$i.log
+#     python main.py --model iTransformer --dataset SMD -w 350 -s 35 -d 70 -e $epochs --feats -1 --k $i --loss softdtw --name rep_$i --retrain --less > iTransformer_new/out_SMD_$i.log
+#     python main.py --model iTransformer --dataset SWaT_small -w 51 -s 5 -d 10 -e $epochs --feats -1 --k $i --loss softdtw --name rep_$i --retrain > iTransformer_new/out_SWaT_small_$i.log
+#     python main.py --model iTransformer --dataset SWaT_1D -w 10 -s 5 -d 2 -e $epochs --feats -1 --k $i --loss softdtw --name rep_$i --retrain > iTransformer_new/out_SWaT_1D_$i.log
+#     python main.py --model iTransformer --dataset UCR -w 10 -s 5 -d 2 -e $epochs --feats -1 --k $i --loss softdtw --name rep_$i --retrain > iTransformer_new/out_UCR_$i.log
+#     python main.py --model iTransformer --dataset WADI -w 44 -s 4 -d 44 -e $epochs --feats 30 --k $i --loss softdtw --name rep_$i --retrain --less > iTransformer_new/out_WADI_$i.log
+# done
 
-for i in {4..5}
-do
-    python main.py --model iTransformer --dataset creditcard_normal -w 10 -s 1 -d 2 -e $epochs --feats -1 --k $i --loss softdtw --name rep_$i --retrain --less > iTransformer_new/out_creditcard_normal_$i.log
-    python main.py --model iTransformer --dataset creditcard -w 10 -s 1 -d 2 -e $epochs --feats -1 --k $i --loss softdtw --name rep_$i --retrain --less > iTransformer_new/out_creditcard_$i.log
-    python main.py --model iTransformer --dataset GECCO -w 12 -s 1 -d 2 -e $epochs --feats -1 --k $i --loss softdtw --name rep_$i --retrain > iTransformer_new/out_GECCO_$i.log
-done
+# for i in {4..5}
+# do
+#     python main.py --model iTransformer --dataset creditcard_normal -w 10 -s 1 -d 2 -e $epochs --feats -1 --k $i --loss softdtw --name rep_$i --retrain --less > iTransformer_new/out_creditcard_normal_$i.log
+#     python main.py --model iTransformer --dataset creditcard -w 10 -s 1 -d 2 -e $epochs --feats -1 --k $i --loss softdtw --name rep_$i --retrain --less > iTransformer_new/out_creditcard_$i.log
+#     python main.py --model iTransformer --dataset GECCO -w 12 -s 1 -d 2 -e $epochs --feats -1 --k $i --loss softdtw --name rep_$i --retrain > iTransformer_new/out_GECCO_$i.log
+# done
 
-for i in {1..5}
-do
-    python main.py --model iTransformer --dataset creditcard_normal -w 10 -s 1 -d 2 -e $epochs --feats -1 --k $i --loss softdtw_norm --name rep_$i --retrain --less > iTransformer_new/out_creditcard_normal_norm$i.log
-    python main.py --model iTransformer --dataset creditcard -w 10 -s 1 -d 2 -e $epochs --feats -1 --k $i --loss softdtw_norm --name rep_$i --retrain --less > iTransformer_new/out_creditcard_norm$i.log
-    python main.py --model iTransformer --dataset GECCO_normal -w 12 -s 1 -d 2 -e $epochs --feats -1 --k $i --loss softdtw_norm --name rep_$i --retrain > iTransformer_new/out_GECCO_normal_norm$i.log
-    python main.py --model iTransformer --dataset GECCO -w 12 -s 1 -d 2 -e $epochs --feats -1 --k $i --loss softdtw_norm --name rep_$i --retrain > iTransformer_new/out_GECCO_norm$i.log
-    python main.py --model iTransformer --dataset IEEECIS_new2.2 -w 10 -s 1 -d 10 -e $epochs --feats 30 --k $i --loss softdtw_norm --name rep_$i --retrain > iTransformer_new/out_IEEECIS_norm$i.log
-    python main.py --model iTransformer --dataset MSL_new -w 96 -s 10 -d 96 -e $epochs --feats -1 --k $i --loss softdtw_norm --name rep_$i --retrain --less > iTransformer_new/out_MSL_norm$i.log
-    python main.py --model iTransformer --dataset SMAP_new -w 15 -s 2 -d 15 -e $epochs --feats -1 --k $i --loss softdtw_norm --name rep_$i --retrain > iTransformer_new/out_SMAP_norm$i.log
-    python main.py --model iTransformer --dataset SMD -w 350 -s 35 -d 70 -e $epochs --feats -1 --k $i --loss softdtw_norm --name rep_$i --retrain > iTransformer_new/out_SMD_norm$i.log
-    python main.py --model iTransformer --dataset SWaT_small -w 51 -s 5 -d 10 -e $epochs --feats -1 --k $i --loss softdtw_norm --name rep_$i --retrain > iTransformer_new/out_SWaT_small_norm$i.log
-    python main.py --model iTransformer --dataset SWaT_1D -w 10 -s 5 -d 2 -e $epochs --feats -1 --k $i --loss softdtw_norm --name rep_$i --retrain > iTransformer_new/out_SWaT_1D_norm$i.log
-    python main.py --model iTransformer --dataset UCR -w 10 -s 5 -d 2 -e $epochs --feats -1 --k $i --loss softdtw_norm --name rep_$i --retrain > iTransformer_new/out_UCR_norm$i.log
-    python main.py --model iTransformer --dataset WADI -w 44 -s 4 -d 44 -e $epochs --feats 30 --k $i --loss softdtw_norm --name rep_$i --retrain --less > iTransformer_new/out_WADI_norm$i.log
-done
+# for i in {1..5}
+# do
+#     python main.py --model iTransformer --dataset creditcard_normal -w 10 -s 1 -d 2 -e $epochs --feats -1 --k $i --loss softdtw_norm --name rep_$i --retrain --less > iTransformer_new/out_creditcard_normal_norm$i.log
+#     python main.py --model iTransformer --dataset creditcard -w 10 -s 1 -d 2 -e $epochs --feats -1 --k $i --loss softdtw_norm --name rep_$i --retrain --less > iTransformer_new/out_creditcard_norm$i.log
+#     python main.py --model iTransformer --dataset GECCO_normal -w 12 -s 1 -d 2 -e $epochs --feats -1 --k $i --loss softdtw_norm --name rep_$i --retrain > iTransformer_new/out_GECCO_normal_norm$i.log
+#     python main.py --model iTransformer --dataset GECCO -w 12 -s 1 -d 2 -e $epochs --feats -1 --k $i --loss softdtw_norm --name rep_$i --retrain > iTransformer_new/out_GECCO_norm$i.log
+#     python main.py --model iTransformer --dataset IEEECIS_new2.2 -w 10 -s 1 -d 10 -e $epochs --feats 30 --k $i --loss softdtw_norm --name rep_$i --retrain > iTransformer_new/out_IEEECIS_norm$i.log
+#     python main.py --model iTransformer --dataset MSL_new -w 96 -s 10 -d 96 -e $epochs --feats -1 --k $i --loss softdtw_norm --name rep_$i --retrain --less > iTransformer_new/out_MSL_norm$i.log
+#     python main.py --model iTransformer --dataset SMAP_new -w 15 -s 2 -d 15 -e $epochs --feats -1 --k $i --loss softdtw_norm --name rep_$i --retrain > iTransformer_new/out_SMAP_norm$i.log
+#     python main.py --model iTransformer --dataset SMD -w 350 -s 35 -d 70 -e $epochs --feats -1 --k $i --loss softdtw_norm --name rep_$i --retrain > iTransformer_new/out_SMD_norm$i.log
+#     python main.py --model iTransformer --dataset SWaT_small -w 51 -s 5 -d 10 -e $epochs --feats -1 --k $i --loss softdtw_norm --name rep_$i --retrain > iTransformer_new/out_SWaT_small_norm$i.log
+#     python main.py --model iTransformer --dataset SWaT_1D -w 10 -s 5 -d 2 -e $epochs --feats -1 --k $i --loss softdtw_norm --name rep_$i --retrain > iTransformer_new/out_SWaT_1D_norm$i.log
+#     python main.py --model iTransformer --dataset UCR -w 10 -s 5 -d 2 -e $epochs --feats -1 --k $i --loss softdtw_norm --name rep_$i --retrain > iTransformer_new/out_UCR_norm$i.log
+#     python main.py --model iTransformer --dataset WADI -w 44 -s 4 -d 44 -e $epochs --feats 30 --k $i --loss softdtw_norm --name rep_$i --retrain --less > iTransformer_new/out_WADI_norm$i.log
+# done

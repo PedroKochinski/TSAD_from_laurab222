@@ -2,7 +2,6 @@ import os
 import math
 import glob
 import numpy as np
-import torch
 from src.folderconstants import *
 from torch.utils.data import Dataset, DataLoader
 
@@ -111,14 +110,16 @@ class MyDataset(Dataset):
             else:
                 max_feats = self.feats
             data = data[:, :max_feats]
+            if type == 'test' and labels.ndim > 1:
+                labels = labels[:, :max_feats]
         else:
             self.feats = data.shape[1] - self.enc_feats
 
         if self.less and self.data_name not in file_prefixes.keys():
-            data = data[:5000]
+            data = data[:10000]
             ts_lengths = [data.shape[0]]
             if type == 'test':  
-                labels = labels[:5000]
+                labels = labels[:10000]
         
         # 5-fold cross validation
         if not kfold and self.k >= 0 and len(paths) == 1:
@@ -219,7 +220,7 @@ class MyDataset(Dataset):
                 windows.append(w if self.modelname in ['TranAD', 'Attention', 'iTransformer', 'Transformer', 'LSTM_AE'] else w.reshape(-1))
             windows = np.stack(windows)
             self.data = windows
-            if self.modelname not in ['TranAD', 'Attention', 'iTransformer', 'Transformer', 'LSTM_AE']:
+            if self.modelname not in ['TranAD', 'Attention', 'iTransformer', 'Transformer', 'LSTM_AE', 'None', 'USAD']:
                 self.feats = windows.shape[1]
 
     def __len__(self):

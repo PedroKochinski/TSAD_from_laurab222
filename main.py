@@ -9,7 +9,7 @@ from torchinfo import summary
 from tslearn.metrics import SoftDTWLossPyTorch
 
 from src.constants import *
-from src.plotting import plot_accuracies, plot_labels, plot_losses, plotter, plotter2, compare_labels, plot_correlation_anomalyscore
+from src.plotting import plot_accuracies, plot_labels, plot_losses, plotter, plotter2, compare_labels, plot_MSE_vs_ascore, plot_correlation_anomalyscore
 # from src.pot import SPOT
 from src.dlutils import ComputeLoss
 from src.utils import load_model, save_model, EarlyStopper
@@ -99,24 +99,31 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, los
 			scheduler.step()
 			return loss.item(), optimizer.param_groups[0]['lr']
 		else:
-			y_preds = []
+			# y_preds = torch.empty(0)
+			# loss = torch.empty(0)
+			loss = []; y_preds = []
 			for i, d in enumerate(data):
 				y_pred, _, _, hidden = model(d, hidden if i else None)
 				y_preds.append(y_pred)
+				d = d.view(-1)
+				l1 = l(y_pred, d)
+				loss.append(l1)
 			y_pred = torch.stack(y_preds)
-			data_all = data.get_data()
-			loss = l(y_pred, data_all)
+			loss = torch.stack(loss)
+			y_pred = y_pred.view(-1, feats)
+			loss = loss.view(-1, feats)
 			if pred:
 				return loss.detach().numpy(), y_pred.detach().numpy()
 			else:
 				return loss.detach().numpy()
 	elif 'USAD' in model.name:
 		l = nn.MSELoss(reduction = 'none')
-		n = epoch + 1; w_size = model.window_size
+		n = epoch + 1
 		l1s, l2s = [], []
 		if training:
 			for d in data:
 				ae1s, ae2s, ae2ae1s = model(d)
+				d = d.view(-1)
 				l1 = (1 / n) * l(ae1s, d) + (1 - 1/n) * l(ae2ae1s, d)
 				l2 = (1 / n) * l(ae2s, d) - (1 - 1/n) * l(ae2ae1s, d)
 				l1s.append(torch.mean(l1).item()); l2s.append(torch.mean(l2).item())
@@ -129,96 +136,24 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, los
 			return np.mean(l1s)+np.mean(l2s), optimizer.param_groups[0]['lr']
 		else:
 			ae1s, ae2s, ae2ae1s = [], [], []
+			l1s = []
+			datashape = feats * model.window_size
 			for d in data: 
 				ae1, ae2, ae2ae1 = model(d)
 				ae1s.append(ae1); ae2s.append(ae2); ae2ae1s.append(ae2ae1)
+				d = d.view(-1)
+				l1 = 0.1 * l(ae1, d) + 0.9 * l(ae2ae1, d)
+				l1s.append(l1)
 			ae1s, ae2s, ae2ae1s = torch.stack(ae1s), torch.stack(ae2s), torch.stack(ae2ae1s)
-			y_pred = ae1s[:, data.shape[1]-feats:data.shape[1]].view(-1, feats)
-			loss = 0.1 * l(ae1s, data) + 0.9 * l(ae2ae1s, data)
-			loss = loss[:, data.shape[1]-feats:data.shape[1]].view(-1, feats)
-			if pred:
-				return loss.detach().numpy(), y_pred.detach().numpy()
-			else:
-				return loss.detach().numpy()
-	elif model.name in ['GDN', 'MTAD_GAT', 'MSCRED', 'CAE_M']:
-		l = nn.MSELoss(reduction = 'none')
-		n = epoch + 1; w_size = model.window_size
-		l1s = []
-		if training:
-			for i, d in enumerate(data):
-				if 'MTAD_GAT' in model.name: 
-					x, h = model(d, h if i else None)
-				else:
-					x = model(d)
-				loss = torch.mean(l(x, d))
-				l1s.append(torch.mean(loss).item())
-				optimizer.zero_grad()
-				loss.backward()
-				optimizer.step()
-			tqdm.write(f'Epoch {epoch},\tMSE = {np.mean(l1s)}')
-			return np.mean(l1s), optimizer.param_groups[0]['lr']
-		else:
-			xs = []
-			for d in data: 
-				if 'MTAD_GAT' in model.name: 
-					x, h = model(d, None)
-				else:
-					x = model(d)
-				xs.append(x)
-			xs = torch.stack(xs)
-			y_pred = xs[:, data.shape[1]-feats:data.shape[1]].view(-1, feats)
-			loss = l(xs, data)
-			loss = loss[:, data.shape[1]-feats:data.shape[1]].view(-1, feats)
-			if pred:
-				return loss.detach().numpy(), y_pred.detach().numpy()
-			else:
-				return loss.detach().numpy()
-	elif 'GAN' in model.name:
-		l = nn.MSELoss(reduction = 'none')
-		bcel = nn.BCELoss(reduction = 'mean')
-		msel = nn.MSELoss(reduction = 'mean')
-		real_label, fake_label = torch.tensor([0.9]), torch.tensor([0.1]) # label smoothing
-		real_label, fake_label = real_label.type(torch.DoubleTensor), fake_label.type(torch.DoubleTensor)
-		n = epoch + 1; w_size = model.window_size
-		mses, gls, dls = [], [], []
-		if training:
-			for d in data:
-				# training discriminator
-				model.discriminator.zero_grad()
-				_, real, fake = model(d)
-				dl = bcel(real, real_label) + bcel(fake, fake_label)
-				dl.backward()
-				model.generator.zero_grad()
-				optimizer.step()
-				# training generator
-				z, _, fake = model(d)
-				mse = msel(z, d) 
-				gl = bcel(fake, real_label)
-				tl = gl + mse
-				tl.backward()
-				model.discriminator.zero_grad()
-				optimizer.step()
-				mses.append(mse.item()); gls.append(gl.item()); dls.append(dl.item())
-			tqdm.write(f'Epoch {epoch},\tMSE = {np.mean(mses)},\tG = {np.mean(gls)},\tD = {np.mean(dls)}')
-			return np.mean(gls)+np.mean(dls), optimizer.param_groups[0]['lr']
-		else:
-			outputs = []
-			for d in data: 
-				z, _, _ = model(d)
-				outputs.append(z)
-			outputs = torch.stack(outputs)
-			y_pred = outputs[:, data.shape[1]-feats:data.shape[1]].view(-1, feats)
-			loss = l(outputs, data)
-			loss = loss[:, data.shape[1]-feats:data.shape[1]].view(-1, feats)
+			l1s = torch.stack(l1s)
+			y_pred = ae1s[:, -feats:]
+			loss = l1s[:, -feats:]
 			if pred:
 				return loss.detach().numpy(), y_pred.detach().numpy()
 			else:
 				return loss.detach().numpy()
 	elif 'TranAD' in model.name:
 		l = nn.MSELoss(reduction = 'none')
-		# data_x = torch.DoubleTensor(data); dataset = TensorDataset(data_x, data_x)
-		# bs = model.batch if training else len(data)
-		# dataloader = DataLoader(dataset, batch_size = bs)
 		n = epoch + 1
 		l1s, l2s = [], []
 		if training:
@@ -425,7 +360,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, los
 				y_pred = model(d)
 				l1 = l(y_pred, d)
 				loss = torch.cat((loss, l1), dim=0)
-				z_all = torch.cat((z_all, d), dim=0)
+				z_all = torch.cat((z_all, y_pred), dim=0)
 			loss = loss.view((-1, feats))
 			z_all = z_all.view((-1, feats))
 			if pred:
@@ -488,9 +423,9 @@ if __name__ == '__main__':
 
 	# define path for results, checkpoints & plots & create directories
 	if args.name:
-		folder = f'{args.model}_new/{args.model}_{args.dataset}/window{args.window_size}_steps{args.step_size}_dmodel{args.d_model}_feats{args.feats}_eps{args.epochs}_{args.loss}/{args.name}'
+		folder = f'{args.model}/{args.model}_{args.dataset}/window{args.window_size}_steps{args.step_size}_dmodel{args.d_model}_feats{args.feats}_eps{args.epochs}_{args.loss}/{args.name}'
 	else:
-		folder = f'{args.model}_new/{args.model}_{args.dataset}/window{args.window_size}_steps{args.step_size}_dmodel{args.d_model}_feats{args.feats}_eps{args.epochs}_{args.loss}'
+		folder = f'{args.model}/{args.model}_{args.dataset}/window{args.window_size}_steps{args.step_size}_dmodel{args.d_model}_feats{args.feats}_eps{args.epochs}_{args.loss}'
 	plot_path = f'{folder}/plots'
 	res_path = f'{folder}/results'
 	if args.checkpoint is None:
@@ -557,12 +492,12 @@ if __name__ == '__main__':
 
 		sample_batch = next(iter(data_loader_train))
 		f.write('\nModel Summary:\n')
-		if model.name == 'TranAD':
-			window = sample_batch.permute(1, 0, 2)
-			elem = window[-1, :, :].view(1, -1, feats)
-			f.write(str(summary(model, input_data=[window, elem], depth=5, verbose=0)))
-		else:
-			f.write(str(summary(model, input_data=sample_batch, depth=5, verbose=0)))
+		# if model.name == 'TranAD':
+		# 	window = sample_batch.permute(1, 0, 2)
+		# 	elem = window[-1, :, :].view(1, -1, feats)
+		# 	f.write(str(summary(model, input_data=[window, elem], depth=5, verbose=0)))
+		# else:
+		# 	f.write(str(summary(model, input_data=sample_batch, depth=5, verbose=0)))
 		
 	### Training phase
 	if not args.test:
@@ -658,11 +593,11 @@ if __name__ == '__main__':
 	# print('plot saved')
 	# sys.exit()
 
-	if feats <= 30:
-		testOO = test.get_complete_data_wpadding()
-		nolabels = np.zeros_like(loss)
-		print(len(testOO), len(y_pred), len(loss))
-		plotter(plot_path, testOO, y_pred, loss, nolabels, test.get_ideal_lengths(), name='output_padded')
+	# if feats <= 30:
+	# 	testOO = test.get_complete_data_wpadding()
+	# 	nolabels = np.zeros_like(loss)
+	# 	print(len(testOO), len(y_pred), len(loss))
+	# 	plotter(plot_path, testOO, y_pred, loss, nolabels, test.get_ideal_lengths(), name='output_padded')
 	
 	print(lossT.shape, loss.shape, labels.shape)
 	if 'iTransformer' in model.name or model.name in ['LSTM_AE', 'Transformer']:
@@ -703,10 +638,10 @@ if __name__ == '__main__':
 	test_loss = np.mean(loss)
 
 	### Plot curves
-	# if feats <= 40:
-	testO = test.get_complete_data()
-	print(len(testO), len(y_pred), len(labels))
-	plotter(plot_path, testO, y_pred, loss, labels, test.get_ts_lengths(), name='output')
+	if feats <= 40:
+		testO = test.get_complete_data()
+		print(len(testO), len(y_pred), len(labels))
+		plotter(plot_path, testO, y_pred, loss, labels, test.get_ts_lengths(), name='output')
 
 	# # if step_size > 1, define truth labels per window instead of per time stamp, can also just use non-overlapping windows for testing
 	# if args.step_size > 1:
@@ -717,8 +652,7 @@ if __name__ == '__main__':
 
 
 	# test using IQR as anomaly score
-
-	# IQR_50 = np.abs(y75 - y25) 
+	# IQR_50 = np.abs(y7,5 - y25) 
 	# IQR_50T = np.abs(y75T - y25T)
 	# plot_correlation_anomalyscore(loss, IQR_50, labels, plot_path, name='norm0')
 	# IQR_50 = (np.abs(y75 - y25) / 2) **2
@@ -742,6 +676,16 @@ if __name__ == '__main__':
 	# lossT = np.maximum( np.abs(yT-y75T), np.abs(yT-y25T) )
 
 
+	# anomaly labels with IQR
+	# pred_IQR, res_local_IQR = local_pot(IQR_50, IQR_50T, labels, args.q, plot_path)
+	true_labels = (np.sum(labels, axis=1) >= 1) + 0
+	# labelspred_loc_IQR, result_local_IQR = local_anomaly_labels(pred_IQR, true_labels, args.q, plot_path, nb_adim=1)
+	# labelspred_maj_IQR, result_local_IQR_maj = local_anomaly_labels(pred_IQR, true_labels, args.q, plot_path, nb_adim=math.ceil(labels.shape[1] / 2))
+	# IQR_50TFinal, IQR_50Final = np.mean(IQR_50T, axis=1), np.mean(IQR_50, axis=1)
+	# result_global_IQR, pred_global_IQR = pot_eval(IQR_50Final, IQR_50Final, true_labels, plot_path, f'all_dim_IQR', q=args.q)
+	# labelspred_glob_IQR = (pred_global_IQR >= 1) + 0
+
+	plot_MSE_vs_ascore(plot_path, loss, true_labels)
 
 	### anomaly labels
 	preds, df_res_local = local_pot(loss, lossT, labels, args.q, plot_path)
@@ -765,24 +709,24 @@ if __name__ == '__main__':
 	results_all.index = nb_adim
 	results_all.to_csv(f'{res_path}/res_local_all.csv')
 
-	# global anomaly labels with weighted average
-	if args.loss in ['Huber_quant', 'penalty']:
-		IQR_50T = np.abs(y75T - y25T)
-		factorsT = 1 / IQR_50T
-		normT = np.mean(factorsT, axis=0)
-		print(normT.shape, factorsT.shape)
-		factorsT = factorsT / normT
-		divT = lossT * factorsT 
-		IQR_50 = np.abs(y75 - y25)
-		factors = 1 / IQR_50
-		norm = np.sum(factors, axis=1)
-		factors = factors / norm[:, np.newaxis]
-		div = loss * factors
-		lossTfinal_weighted, lossFinal_weighted = np.sum(divT, axis=1), np.mean(div, axis=1)
-		true_labels = (np.sum(labels, axis=1) >= 1) + 0
-		result_global_weighted, pred2 = pot_eval(lossTfinal_weighted, lossFinal_weighted, 
-								  true_labels, plot_path, f'all_dim_weighted', q=args.q)
-		labelspred_glob_weighted = (pred2 >= 1) + 0
+	# # global anomaly labels with weighted average
+	# if args.loss in ['Huber_quant', 'penalty']:
+	# 	IQR_50T = np.abs(y75T - y25T)
+	# 	factorsT = 1 / IQR_50T
+	# 	normT = np.mean(factorsT, axis=0)
+	# 	print(normT.shape, factorsT.shape)
+	# 	factorsT = factorsT / normT
+	# 	divT = lossT * factorsT 
+	# 	IQR_50 = np.abs(y75 - y25)
+	# 	factors = 1 / IQR_50
+	# 	norm = np.sum(factors, axis=1)
+	# 	factors = factors / norm[:, np.newaxis]
+	# 	div = loss * factors
+	# 	lossTfinal_weighted, lossFinal_weighted = np.sum(divT, axis=1), np.mean(div, axis=1)
+	# 	true_labels = (np.sum(labels, axis=1) >= 1) + 0
+	# 	result_global_weighted, pred2 = pot_eval(lossTfinal_weighted, lossFinal_weighted, 
+	# 							  true_labels, plot_path, f'all_dim_weighted', q=args.q)
+	# 	labelspred_glob_weighted = (pred2 >= 1) + 0
 		
 	# global anomaly labels
 	lossTfinal, lossFinal = np.mean(lossT, axis=1), np.mean(loss, axis=1)
@@ -791,7 +735,6 @@ if __name__ == '__main__':
 	labelspred_glob = (pred2 >= 1) + 0
 
 	plot_labels(plot_path, 'labels_global', y_pred=labelspred_glob, y_true=true_labels)
-	# metrics_global = calc_point2point(predict=labelspred_glob, actual=true_labels)
 	result_global.update(hit_att(loss, labels))
 	result_global.update(ndcg(loss, labels))
 	if not args.test:
@@ -801,24 +744,37 @@ if __name__ == '__main__':
 	print('\nglobal results') 
 	pprint(result_global)
 
-	plot_metrics(plot_path, ['local (incl. OR)', 'local (maj. voting)', 'global', 'global weighted'], 
-			  y_pred=[labelspred, labelspred_maj, labelspred_glob], y_true=true_labels) #labelspred_glob_weighted
+	plot_metrics(plot_path, ['local (incl. OR)', 'local (maj. voting)', 'global', 'IQR (incl. OR)', 'IQR (maj. voting)', 'IQR global'], 
+			  y_pred=[labelspred, labelspred_maj, labelspred_glob],
+			#   , labelspred_loc_IQR, labelspred_maj_IQR, labelspred_glob_IQR ], 
+			y_true=true_labels)
 
 	# compare local & global anomaly labels
-	compare_labels(plot_path, pred_labels=[labelspred, labelspred_maj, labelspred_glob], true_labels=true_labels, 
-				plot_labels=['Local anomaly\n(inclusive OR)', 'Local anomaly\n(majority voting)', 'Global anomaly'], 
-				name='_all')
+	# compare_labels(plot_path, pred_labels=[labelspred, labelspred_maj, labelspred_glob], true_labels=true_labels, 
+	# 			plot_labels=['Local anomaly\n(inclusive OR)', 'Local anomaly\n(majority voting)', 'Global anomaly'], 
+	# 			name='_all')
 	
-	# if feats <= 40:
-	if args.loss in ['Huber_quant', 'penalty']:
-		plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred, labels, name='_local_or')
-		plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred_maj, labels, name='_local_maj')
-		plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred_glob, labels, name='_global')
-		# plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred_glob_weighted, labels, name='_global_weighted')
-	else:
-		plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred, labels, name='_local_or')
-		plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred_maj, labels, name='_local_maj')
-		plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred_glob, labels, name='_global')
+	# combination of MSE + IQR anomaly labels
+	# comb_labels_loc = ((labelspred + labelspred_loc_IQR) >= 1) + 0
+	# comb_labels_maj = ((labelspred_maj + labelspred_maj_IQR) >= 1) + 0
+	# comb_labels_glob = ((labelspred_glob + labelspred_glob_IQR) >= 1) + 0
+	# plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, comb_labels_loc, labels, name='_local_comb')
+	# plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, comb_labels_maj, labels, name='_local_comb_maj')
+	# plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, comb_labels_glob, labels, name='_global_comb')
+	# plot_metrics(plot_path, ['Comb. (incl. OR)', 'Comb. (maj. voting)', 'Comb. global'],
+	# 		  y_pred=[comb_labels_loc, comb_labels_maj, comb_labels_glob],
+	# 		  y_true=true_labels)
+
+	if feats <= 40:
+		if args.loss in ['Huber_quant', 'penalty']:
+			plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred, labels, name='_local_or')
+			plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred_maj, labels, name='_local_maj')
+			plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred_glob, labels, name='_global')
+			# plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred_glob_weighted, labels, name='_global_weighted')
+		else:
+			plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred, labels, name='_local_or')
+			plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred_maj, labels, name='_local_maj')
+			plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred_glob, labels, name='_global')
 
 	# saving results
 	df_res_global = pd.DataFrame.from_dict(result_global, orient='index').T
@@ -827,21 +783,43 @@ if __name__ == '__main__':
 	result_local2 = pd.DataFrame.from_dict(result_local2, orient='index').T
 	result_local1.index = ['local_all']
 	result_local2.index = ['local_all_maj']
+	# result_local1_IQR = pd.DataFrame.from_dict(result_local_IQR, orient='index').T
+	# result_local2_IQR = pd.DataFrame.from_dict(result_local_IQR_maj, orient='index').T
+	# result_global_IQR = pd.DataFrame.from_dict(result_global_IQR, orient='index').T
+	# result_local1_IQR.index = ['local_all_IQR']
+	# result_local2_IQR.index = ['local_all_maj_IQR']
+	# result_global_IQR.index = ['global_IQR']
+	# result_local = calc_point2point(predict=comb_labels_loc, actual=true_labels)
+	# result_local_comb = {'f1': result_local[0], 'precision': result_local[1], 'recall': result_local[2], 
+	# 			'TP': result_local[3], 'TN': result_local[4], 'FP': result_local[5], 'FN': result_local[6], 
+	# 			'ROC/AUC': result_local[7], 'MCC': result_local[8]}
+	# results_local_comb = pd.DataFrame.from_dict(result_local_comb, orient='index').T
+	# results_local_comb.index = ['local_comb']
+	# result_local = calc_point2point(predict=comb_labels_maj, actual=true_labels)
+	# result_local_comb_maj = {'f1': result_local[0], 'precision': result_local[1], 'recall': result_local[2], 
+	# 			'TP': result_local[3], 'TN': result_local[4], 'FP': result_local[5], 'FN': result_local[6], 
+	# 			'ROC/AUC': result_local[7], 'MCC': result_local[8]}
+	# results_local_comb_maj = pd.DataFrame.from_dict(result_local_comb_maj, orient='index').T
+	# results_local_comb_maj.index = ['local_comb_maj']
+	# result_local = calc_point2point(predict=comb_labels_glob, actual=true_labels)
+	# result_global_comb = {'f1': result_local[0], 'precision': result_local[1], 'recall': result_local[2], 
+	# 			'TP': result_local[3], 'TN': result_local[4], 'FP': result_local[5], 'FN': result_local[6], 
+	# 			'ROC/AUC': result_local[7], 'MCC': result_local[8]}
+	# results_global_comb = pd.DataFrame.from_dict(result_global_comb, orient='index').T
+	# results_global_comb.index = ['global_comb']
 	if args.loss in ['Huber_quant', 'penalty']:
-		result_global_weighted = pd.DataFrame.from_dict(result_global_weighted, orient='index').T
-		result_global_weighted.index = ['global_weighted']
-		df_res_local = pd.concat([df_res_local, result_local1, result_local2, result_global_weighted])
+		# result_global_weighted = pd.DataFrame.from_dict(result_global_weighted, orient='index').T
+		# result_global_weighted.index = ['global_weighted']
+		df_res_local = pd.concat([df_res_local, result_local1, result_local2]) #, result_local1_IQR, result_local2_IQR, result_global_IQR])
 	else:
-		df_res_local = pd.concat([df_res_local, result_local1, result_local2])
-	df_res = pd.concat([df_res_local, df_res_global])
+		df_res_local = pd.concat([df_res_local, result_local1, result_local2]) 
+								# result_local1_IQR, result_local2_IQR, result_global_IQR,
+								# results_local_comb, results_local_comb_maj, results_global_comb])
+	df_res = pd.concat([df_res_local, result_local1, result_local2, 
+								# result_local1_IQR, result_local2_IQR, result_global_IQR,
+								# results_local_comb, results_local_comb_maj, results_global_comb,
+								df_res_global])
 	df_labels = pd.DataFrame( {'local_or': labelspred, 'local_maj': labelspred_maj, 'global': labelspred_glob} )
 
 	df_res.to_csv(f'{res_path}/res.csv')	
 	df_labels.to_csv(f'{res_path}/pred_labels.csv', index=False)
-
-	# np.save(f'{res_path}/y_pred.npy', y_pred)
-	# np.save(f'{res_path}/y_true.npy', testO)
-	# np.save(f'{res_path}/y25_pred.npy', y25)
-	# np.save(f'{res_path}/y75_pred.npy', y75)
-	# np.save(f'{res_path}/pred_labelsMSE.npy', labelspred)
-	# np.save(f'{res_path}/true_labels.npy', true_labels)
