@@ -462,9 +462,9 @@ if __name__ == '__main__':
 
 	# define path for results, checkpoints & plots & create directories
 	if args.name:
-		folder = f'{args.model}_param_search/{args.model}_{args.dataset}/window{args.window_size}_steps{args.step_size}_dmodel{args.d_model}_feats{args.feats}_eps{args.epochs}/{args.name}'
+		folder = f'{args.model}/{args.model}_{args.dataset}/window{args.window_size}_steps{args.step_size}_dmodel{args.d_model}_feats{args.feats}_eps{args.epochs}/{args.name}'
 	else:
-		folder = f'{args.model}_param_search/{args.model}_{args.dataset}/window{args.window_size}_steps{args.step_size}_dmodel{args.d_model}_feats{args.feats}_eps{args.epochs}'
+		folder = f'{args.model}/{args.model}_{args.dataset}/window{args.window_size}_steps{args.step_size}_dmodel{args.d_model}_feats{args.feats}_eps{args.epochs}'
 	plot_path = f'{folder}/plots'
 	res_path = f'{folder}/results'
 	if args.checkpoint is None:
@@ -554,7 +554,7 @@ if __name__ == '__main__':
 				lossV = 0
 			tqdm.write(f'Epoch {e},\tL_train = {lossT}, \t\tL_valid = {lossV}, \tLR = {lr}')
 			accuracy_list.append((lossT, lossV, lr))
-			save_model(checkpoints_path, model, optimizer, scheduler, e, accuracy_list, f'_epoch{e}')
+			# save_model(checkpoints_path, model, optimizer, scheduler, e, accuracy_list, f'_epoch{e}')
 			if args.k > 0 and early_stopper.early_stop(-lossV):
 				print(f'{color.HEADER}Early stopping at epoch {e}{color.ENDC}')
 				break
@@ -577,8 +577,8 @@ if __name__ == '__main__':
 
 	### Scores
 	lossT = backprop(-1, model, data_loader_train_test, feats, optimizer, scheduler, training=False, enc_feats=enc_feats, prob=args.prob, pred=False)  # need anomaly scores on training data for POT
-	loss, y_pred = backprop(-1, model, data_loader_test, feats, optimizer, scheduler, training=False, enc_feats=enc_feats, prob=args.prob, pred=True)	
-	# loss = backprop(-1, model, data_loader_test, feats, optimizer, scheduler, training=False, enc_feats=enc_feats, prob=args.prob, pred=False)	
+	# loss, y_pred = backprop(-1, model, data_loader_test, feats, optimizer, scheduler, training=False, enc_feats=enc_feats, prob=args.prob, pred=True)	
+	loss = backprop(-1, model, data_loader_test, feats, optimizer, scheduler, training=False, enc_feats=enc_feats, prob=args.prob, pred=False)	
 
 	# just for studies_posinwindow
 	# fig, axs = plt.subplots(nrows=feats, ncols=1, figsize=(16, feats * 2))
@@ -618,11 +618,11 @@ if __name__ == '__main__':
 	# print('plot saved')
 	# sys.exit()
 
-	if feats <= 30:
-		testOO = test.get_complete_data_wpadding()
-		nolabels = np.zeros_like(loss)
-		print(len(testOO), len(y_pred), len(loss))
-		plotter(plot_path, testOO, y_pred, loss, nolabels, test.get_ideal_lengths(), name='output_padded')
+	# if feats <= 30:
+	# 	testOO = test.get_complete_data_wpadding()
+	# 	nolabels = np.zeros_like(loss)
+	# 	print(len(testOO), len(y_pred), len(loss))
+	# 	plotter(plot_path, testOO, y_pred, loss, nolabels, test.get_ideal_lengths(), name='output_padded')
 	
 	print(lossT.shape, loss.shape, labels.shape)
 	if ('iTransformer' in model.name or model.name in ['LSTM_AE']) and not args.forecasting:
@@ -633,7 +633,7 @@ if __name__ == '__main__':
 		start = 0
 		for i, l in enumerate(test.get_ts_lengths()):
 			loss_tmp.append(loss[start:start+l])
-			y_pred_tmp.append(y_pred[start:start+l])
+			# y_pred_tmp.append(y_pred[start:start+l])
 			start += test.get_ideal_lengths()[i]
 		
 		start = 0
@@ -643,16 +643,16 @@ if __name__ == '__main__':
 
 		lossT = np.concatenate(lossT_tmp, axis=0)
 		loss = np.concatenate(loss_tmp, axis=0)
-		y_pred = np.concatenate(y_pred_tmp, axis=0)
+		# y_pred = np.concatenate(y_pred_tmp, axis=0)
 	print(lossT.shape, loss.shape, labels.shape)
 	train_loss = np.mean(lossT)
 	test_loss = np.mean(loss)
 
-	### Plot curves
-	if feats <= 40:
-		testO = test.get_complete_data()
-		print(len(testO), len(y_pred), len(labels))
-		plotter(plot_path, testO, y_pred, loss, labels, test.get_ts_lengths(), name='output')
+	# ### Plot curves
+	# if feats <= 40:
+	# 	testO = test.get_complete_data()
+	# 	print(len(testO), len(y_pred), len(labels))
+	# 	plotter(plot_path, testO, y_pred, loss, labels, test.get_ts_lengths(), name='output')
 
 	# # if step_size > 1, define truth labels per window instead of per time stamp, can also just use non-overlapping windows for testing
 	# if args.step_size > 1:
@@ -689,7 +689,7 @@ if __name__ == '__main__':
 	result_global, pred2 = pot_eval(lossTfinal, lossFinal, true_labels, plot_path, f'all_dim', q=args.q)
 	labelspred_glob = (pred2 >= 1) + 0
 
-	plot_labels(plot_path, 'labels_global', y_pred=labelspred_glob, y_true=true_labels)
+	# plot_labels(plot_path, 'labels_global', y_pred=labelspred_glob, y_true=true_labels)
 	# metrics_global = calc_point2point(predict=labelspred_glob, actual=true_labels)
 	result_global.update(hit_att(loss, labels))
 	result_global.update(ndcg(loss, labels))
@@ -703,14 +703,14 @@ if __name__ == '__main__':
 	plot_metrics(plot_path, ['local (incl. OR)', 'local (maj. voting)', 'global'], 
 			  y_pred=[labelspred, labelspred_maj, labelspred_glob], y_true=true_labels)
 
-	# compare local & global anomaly labels
-	compare_labels(plot_path, pred_labels=[labelspred, labelspred_maj, labelspred_glob], true_labels=true_labels, 
-				plot_labels=['Local anomaly\n(inclusive OR)', 'Local anomaly\n(majority voting)', 'Global anomaly'], name='_all')
+	# # compare local & global anomaly labels
+	# compare_labels(plot_path, pred_labels=[labelspred, labelspred_maj, labelspred_glob], true_labels=true_labels, 
+	# 			plot_labels=['Local anomaly\n(inclusive OR)', 'Local anomaly\n(majority voting)', 'Global anomaly'], name='_all')
 	
-	if feats <= 40:
-		plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred, labels, name='_local_or')
-		plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred_maj, labels, name='_local_maj')
-		plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred_glob, labels, name='_global')
+	# if feats <= 40:
+	# 	plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred, labels, name='_local_or')
+	# 	plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred_maj, labels, name='_local_maj')
+	# 	plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred_glob, labels, name='_global')
 
 	# saving results
 	df_res_global = pd.DataFrame.from_dict(result_global, orient='index').T

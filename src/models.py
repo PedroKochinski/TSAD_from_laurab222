@@ -584,7 +584,7 @@ class iTransformer(nn.Module):
 		self.name = 'iTransformer'
 		self.weighted = weighted_window
 		self.lr = lr
-		self.batch = 16  #  if window_size > 1000 else int(1280 / window_size) # 128 for window size 10
+		self.batch = 4  #  if window_size > 1000 else int(1280 / window_size) # 128 for window size 10
 		self.n_feats = feats
 		self.window_size = window_size
 		if step_size is not None:
@@ -693,7 +693,7 @@ class iTransformer_dec(nn.Module):
 		super(iTransformer_dec, self).__init__()
 		self.name = 'iTransformer_dec'
 		self.lr = lr
-		self.batch = 5 # if window_size > 1280 else int(1280 / window_size) # 128 for window size 10
+		self.batch = 2 # if window_size > 1280 else int(1280 / window_size) # 128 for window size 10
 		self.n_feats = feats
 		self.window_size = window_size
 		self.n = self.n_feats * self.window_size
