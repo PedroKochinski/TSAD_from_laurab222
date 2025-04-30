@@ -1,8 +1,13 @@
 import os
 import torch
 import torch.nn as nn
+import numpy as np
+import pandas as pd
+from pprint import pprint
 
 import src.models
+from src.pot import pot_eval, calc_point2point
+from src.plotting import plot_labels
 
 class color:
     HEADER = '\033[95m'
@@ -31,20 +36,18 @@ def save_model(folder, model, optimizer, scheduler, epoch, accuracy_list, name='
         'scheduler_state_dict': scheduler.state_dict(),
         'accuracy_list': accuracy_list}, file_path)
 
-def load_model(modelname, dataset, dims, window_size, step_size=None, d_model=None, 
-			   test=False, path=None, loss='MSE', prob=False, weighted=False):
+def load_model(modelname, dataset, dims, window_size, d_model=None, 
+			   test=False, checkpoints_path=None, loss='MSE'):
 	""" Load or create a model with the specified parameters.
 		Parameters:
 		modelname (str): The name of the model class to be loaded or created.
 		dims (int): The dimensions of the input data, corresponds to nb of features.
 		window_size (int): The window size for the model.
-		step_size (int, optional): The step size for the model. Default is None.
 		d_model (int, optional): The dimension of the model. Default is None.
 		test (bool, optional): Whether to test the model. Default is False.
-		path (str, optional): The path to load the model from. Default is None.
+		checkpoints_path (str, optional): The path to load the model from. Default is None.
 		loss (str, optional): The loss function to be used. Default is 'MSE'.
-		prob (bool, optional): Whether to use probabilistic modeling. Default is False.
-		weighted (bool, optional): Whether to use weighted loss. Default is False.
+
 		Returns:
 		tuple: A tuple containing the model, optimizer, scheduler, epoch, and accuracy_list.
 		If a pre-trained model exists at the specified path and retraining is not required, 
@@ -54,15 +57,15 @@ def load_model(modelname, dataset, dims, window_size, step_size=None, d_model=No
 
 	model_class = getattr(src.models, modelname)
 	if modelname == 'iTransformer':
-		model = model_class(dims, window_size, step_size, d_model, loss, prob, weighted).double()
+		model = model_class(dims, window_size, d_model, loss).double()
 	elif modelname == 'Transformer':
-		model = model_class(dims, window_size, step_size, d_model, loss, prob, weighted).double()
+		model = model_class(dims, window_size, d_model, loss).double()
 	else:
-		model = model_class(dims, window_size, prob).double()
+		model = model_class(dims, window_size).double()
 	optimizer = torch.optim.AdamW(model.parameters() , lr=model.lr, weight_decay=1e-5)
 	scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 5, 0.9)
-	if path is not None:
-		fname = os.path.join(path, 'model_best.ckpt')
+	if checkpoints_path is not None:
+		fname = os.path.join(checkpoints_path, 'model_best.ckpt')
 	else:
 		fname = f'{modelname}_{dataset}/window_size{window_size}/checkpoints/model_best.ckpt'
 	if os.path.exists(fname) and test:
@@ -139,3 +142,45 @@ class combined_loss(nn.Module):
 		# print('huber:', huber.mean().item(), 'quantile1:', quantile1.mean().item(), 'quantile2:', quantile2.mean().item(), 'penalty:', penalty.mean().item())
 		# print('loss:', loss_tot.mean().item())
 		return loss_tot
+
+def local_pot(loss, lossT, labels, q=1e-5, plot_path=None):
+	# computes POT for each variate separately
+	df_res_local = pd.DataFrame()
+	preds = []
+	for i in range(loss.shape[1]):
+		lt, l, ls = lossT[:, i], loss[:, i], labels[:, i]  	
+		result_local, pred = pot_eval(lt, l, ls, plot_path, f'dim{i}', q=q)
+		preds.append(pred)
+		df_res = pd.DataFrame.from_dict(result_local, orient='index').T
+		df_res_local = pd.concat([df_res_local, df_res], ignore_index=True)
+	preds = np.array(preds).T
+	preds = preds.astype(int)
+	return preds, df_res_local
+
+def local_anomaly_labels(preds, labels, q=1e-5, plot_path=None, nb_adim=1):
+	"""
+	Calculate local anomaly labels based on the predicted scores and true labels.
+	Parameters:
+		preds (numpy.ndarray): Predicted scores for each dimension.
+		labels (numpy.ndarray): True labels for each dimension.
+		q (float): Threshold for anomaly detection.
+		plot_path (str): Path to save the plots.
+		nb_adim (int): Number of anomalous dimensions to consider.
+	Returns:
+		labelspred (numpy.ndarray): Predicted labels based on the anomaly scores.
+		result_local1 (dict): Dictionary containing various evaluation metrics.
+	"""
+
+	labelspred = (np.sum(preds, axis=1) >= nb_adim) + 0
+
+	if plot_path is not None:
+		plot_labels(plot_path, f'labels_adim{nb_adim}', y_pred=labelspred, y_true=labels)
+	
+	result_local = calc_point2point(predict=labelspred, actual=labels)
+	result_local1 = {'f1': result_local[0], 'precision': result_local[1], 'recall': result_local[2], 
+				'TP': result_local[3], 'TN': result_local[4], 'FP': result_local[5], 'FN': result_local[6], 
+				'ROC/AUC': result_local[7], 'MCC': result_local[8]}
+	result_local1.update({'detection level q': q})
+	print(f'{color.HEADER}Local results with {nb_adim} anomalous dimensions for anomaly{color.ENDC}')
+	pprint(result_local1)
+	return labelspred, result_local1

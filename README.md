@@ -1,98 +1,126 @@
-[![License](https://img.shields.io/badge/License-BSD%203--Clause-red.svg)](https://github.com/imperial-qore/TranAD/blob/master/LICENSE)
-![Python 3.7, 3.8](https://img.shields.io/badge/python-3.7%20%7C%203.8-blue.svg)
-[![Hits](https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fgithub.com%2Fimperial-qore%2FTranAD&count_bg=%23FFC401&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=hits&edge_flat=false)](https://hits.seeyoufarm.com)
 
-# TranAD
-This repository supplements our paper "TranAD: Deep Transformer Networks for Anomaly Detection in Multivariate Time Series Data" accepted in VLDB 2022. This is a refactored version of the code used for results in the paper for ease of use. Follow the below steps to replicate each cell in the results table. The code is provided as-is. Due to limited resources, we are unable to provide support on any issues you may experience with installing or running the tool.
+# README
 
-Our work has been discussed in the PodBean podcast! [See here](https://papersread.ai/e/tranad-deep-transformer-networks-for-anomaly-detection-in-multivariate-time-series-data-1663142096/). 
+This repository allows to run and compare multipe time series anomaly detection algorithms and contains implementations
+For forecasting-based anomaly detection, switch to branch 'forecasting' please.
 
-## Results
-![Alt text](results/main.PNG?raw=true "results")
+## Info
+Part of this repository is based on the code corresponding to the paper "TranAD: Deep Transformer Networks for Anomaly Detection in Multivariate Time Series Data" (S.Tuli et al., VLDB 2022). The code can be found [here](https://github.com/imperial-qore/TranAD). Thanks a lot!
+
+The iTransformer model used in this code is based on the implementation [here](https://github.com/thuml/iTransformer), based on the paper "iTransformer: Inverted Transformers Are Effective for Time Series Forecasting" (Y.Liu et al., ICLR 2024).
+
 
 ## Installation
-This code needs Python-3.7 or higher.
+This code needs Python-3.8 or higher.
+The provided environment.yml file can be used to set up the environment (using conda or mamba) using:
 ```bash
-pip3 install torch==1.8.1+cpu torchvision==0.9.1+cpu torchaudio===0.8.1 -f https://download.pytorch.org/whl/torch_stable.html
-pip3 install -r requirements.txt
+conda env create -f environment.yml
 ```
 
 ## Dataset Preprocessing
-Preprocess all datasets using the command
+Preprocess all datasets except for IEEECIS using the command
 ```bash
-python3 preprocess.py SMAP MSL SWaT WADI SMD MSDS UCR MBA NAB
+python3 preprocess.py creditcard GECCO SMAP MSL SWaT WADI SMD UCR 
 ```
-Distribution rights to some datasets may not be available. Check the readme files in the `./data/` folder for more details. If you want to ignore a dataset, remove it from the above command to ensure that the preprocessing does not fail.
+Distribution rights to some datasets (i.e. SWaT and WADI) are not be available. All other datasets can be found online, following the references in the paper.
+Further preprocessing is needed for IEEECIS, which is done in 'check_data.ipynb'.
+
 
 ## Result Reproduction
 To run a model on a dataset, run the following command:
 ```bash
-python3 main.py --model <model> --dataset <dataset> --retrain
+python main.py --model <model> --dataset <dataset> --retrain
 ```
-where `<model>` can be either of 'TranAD', 'GDN', 'MAD_GAN', 'MTAD_GAT', 'MSCRED', 'USAD', 'OmniAnomaly', 'LSTM_AD', and dataset can be one of 'SMAP', 'MSL', 'SWaT', 'WADI', 'SMD', 'MSDS', 'MBA', 'UCR' and 'NAB. To train with 20% data, use the following command 
+where `<model>` can be either of 'TranAD', 'GDN', 'MAD_GAN', 'MTAD_GAT', 'MSCRED', 'USAD', 'OmniAnomaly', 'LSTM_AD', and dataset can be one of 'SMAP', 'MSL', 'SWaT', 'WADI', 'SMD', 'MSDS', 'MBA', 'UCR' and 'NAB. To train with less data, (maximum of 10k time stamps), use the following command 
 ```bash
 python3 main.py --model <model> --dataset <dataset> --retrain --less
 ```
-You can use the parameters in `src/params.json` to set values in `src/constants.py` for each file. 
 
-> Note: to reproduce exact results of baselines, use their original codebases (links given in our paper) as the ones implemented in this repository are *not* the ones used in the paper, which used the original versions. The versions provided here are for use of initial comparison and may not be identical to the original versions.
-
-For ablation studies, use the following models: 'TranAD_SelfConditioning', 'TranAD_Adversarial', 'TranAD_Transformer', 'TranAD_Basic'.
-
-The output will provide anomaly detection and diagnosis scores and training time. For example:
+When working with forecasting-based anomaly detection, it is necessary to switch to the branch `forecasting` and add the argument `--forecasting` to the command:
 ```bash
-$ python3 main.py --model TranAD --dataset SMAP --retrain 
-Using backend: pytorch
-Creating new model: TranAD
-Training TranAD on SMAP
-Epoch 0,        L1 = 0.09839354782306504
-Epoch 1,        L1 = 0.039524692888342115
-Epoch 2,        L1 = 0.022258711623482686
-Epoch 3,        L1 = 0.01833707226553135
-Epoch 4,        L1 = 0.016330517334598792
-100%|███████████████████████████████████████████████████████████████████| 5/5 [00:03<00:00,  1.57it/s]
-Training time:     3.1920 s
-Testing TranAD on SMAP
-{'FN': 0,
- 'FP': 182,
+python3 main.py --model <model> --dataset <dataset> --retrain --forecasting
+```
+The step size is by default always 1 when forecasting time series.
+
+Further arguments, their description and default values can be found  `src/parse_args.py`.
+
+The output will provide training time and anomaly detection performance. For example:
+```bash
+Arguments:
+
+{'checkpoint': None,
+ 'd_model': 2,
+ 'dataset': 'GECCO_normal',
+ 'enc': False,
+ 'epochs': 2,
+ 'f': None,
+ 'feats': -1,
+ 'k': -1,
+ 'less': True,
+ 'loss': 'MSE',
+ 'model': 'iTransformer',
+ 'name': 'test_new',
+ 'q': 1e-05,
+ 'retrain': True,
+ 'shuffle': False,
+ 'step_size': 1,
+ 'test': False,
+ 'window_size': 10}
+
+CUDA available: False
+MPS (Apple Silicon GPU) is available: True 
+
+train shape with windows: (9991, 10, 9)
+test shape with windows: (1000, 10, 9)
+labels shape: (10000, 9)
+Creating new model: iTransformer
+total params: 3036, trainable params: 3036
+Training iTransformer on GECCO_normal
+Epoch 0,        L_train = 0.08838528090700046,          L_valid = 0,    LR = 0.0001                                             
+Epoch 1,        L_train = 0.08258313718844805,          L_valid = 0,    LR = 0.0001                                             
+100%|█████████████████████████████████████████████████████████████████████████████████████████████| 2/2 [00:19<00:00,  9.52s/it]
+Training time:    19.0772 s or 0.32 min 
+Testing iTransformer on GECCO_normal
+Local results with 1 anomalous dimensions for anomaly
+{'FN': 46,
+ 'FP': 79,
+ 'MCC': 0.8678293548295123,
+ 'ROC/AUC': 0.9478345746650794,
+ 'TN': 9442,
+ 'TP': 433,
+ 'detection level q': 1e-05,
+ 'f1': 0.8738597709843012,
+ 'precision': 0.8457031084823612,
+ 'recall': 0.9039665782052907}
+Local results with 5 anomalous dimensions for anomaly
+{'FN': 479,
+ 'FP': 0,
+ 'MCC': 0.0,
+ 'ROC/AUC': 0.5,
+ 'TN': 9521,
+ 'TP': 0,
+ 'detection level q': 1e-05,
+ 'f1': 0.0,
+ 'precision': 0.0,
+ 'recall': 0.0}
+Global results with 9 anomalous dimensions for anomaly
+{'FN': 479,
+ 'FP': 3,
  'Hit@100%': 1.0,
  'Hit@150%': 1.0,
- 'NDCG@100%': 0.9999999999999999,
- 'NDCG@150%': 0.9999999999999999,
- 'TN': 7575,
- 'TP': 748,
- 'f1': 0.8915325929177795,
- 'precision': 0.8043010666204187,
- 'recall': 0.9999999866310163,
- 'threshold': 0.16133320075167037}
+ 'MCC': -0.003885547794772807,
+ 'NDCG@100%': 1.0,
+ 'NDCG@150%': 1.0,
+ 'ROC/AUC': 0.49984245352378953,
+ 'TN': 9518,
+ 'TP': 0,
+ 'detection_level_q': 1e-05,
+ 'f1': 0.0,
+ 'precision': 0.0,
+ 'recall': 0.0,
+ 'test_loss': 0.08496810780089022,
+ 'threshold': 3.3204767317791255,
+ 'train_loss': 0.0804248683839156,
+ 'train_time': 19.07716202735901}
 ```
 
-All outputs can be run multiple times to ensure statistical significance. 
-
-## Supplementary video
-
-[![IMAGE ALT TEXT HERE](https://img.youtube.com/vi/b2fSzneXPsg/0.jpg)](https://www.youtube.com/watch?v=b2fSzneXPsg)
-
-## Cite this work
-
-Our paper is available in the Proceedings of VLDB: http://vldb.org/pvldb/vol15/p1201-tuli.pdf.
-If you use this work, please cite using the following bibtex entry.
-```bibtex
-@article{tuli2022tranad,
-  title={{TranAD: Deep Transformer Networks for Anomaly Detection in Multivariate Time Series Data}},
-  author={Tuli, Shreshth and Casale, Giuliano and Jennings, Nicholas R},
-  journal={Proceedings of VLDB},
-  volume={15},
-  number={6},
-  pages={1201-1214},
-  year={2022}
-}
-```
-
-## License
-
-BSD-3-Clause. 
-Copyright (c) 2022, Shreshth Tuli.
-All rights reserved.
-
-See License file for more details.

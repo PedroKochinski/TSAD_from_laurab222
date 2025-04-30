@@ -1,6 +1,8 @@
-import os, sys, math
+import os, math
 import pandas as pd
+import numpy as np
 from tqdm import tqdm
+import torch
 from torch.utils.data import DataLoader
 import torch.nn as nn
 from time import time
@@ -8,80 +10,18 @@ from pprint import pprint
 from torchinfo import summary
 from tslearn.metrics import SoftDTWLossPyTorch
 
-from src.constants import *
-from src.plotting import plot_accuracies, plot_labels, plot_losses, plotter, plotter2, compare_labels, plot_MSE_vs_ascore, plot_correlation_anomalyscore
-# from src.pot import SPOT
-from src.dlutils import ComputeLoss
-from src.utils import load_model, save_model, EarlyStopper
+from src.parse_args import parse_arguments
+from src.pot import pot_eval
+from src.plotting import plot_accuracies, plot_labels, plot_losses, plot_metrics, plotter, plotter2, compare_labels, plot_MSE_vs_ascore
+from src.utils import load_model, save_model, local_anomaly_labels, local_pot, color, EarlyStopper
 from src.diagnosis import hit_att, ndcg
-from src.merlin import *
-from src.utils import combined_loss
 from src.data_loader import MyDataset
 from src.soft_dtw_cuda import SoftDTW
 
 
-def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, lossname='MSE', enc_feats=0, prob=False, pred=False):
+def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, lossname='MSE', enc_feats=0, pred=False):
 	
-	if 'DAGMM' in model.name:
-		l = nn.MSELoss(reduction = 'none')
-		compute = ComputeLoss(model, 0.1, 0.005, 'cpu', model.n_gmm)
-		n = epoch + 1; w_size = model.window_size
-		l1s = []; l2s = []
-		if training:
-			for d in data:
-				_, x_hat, z, gamma = model(d)
-				l1, l2 = l(x_hat, d), l(gamma, d)
-				l1s.append(torch.mean(l1).item()); l2s.append(torch.mean(l2).item())
-				loss = torch.mean(l1) + torch.mean(l2)
-				optimizer.zero_grad()
-				loss.backward()
-				optimizer.step()
-			scheduler.step()
-			tqdm.write(f'Epoch {epoch},\tL1 = {np.mean(l1s)},\tL2 = {np.mean(l2s)}')
-			return np.mean(l1s)+np.mean(l2s), optimizer.param_groups[0]['lr']
-		else:
-			ae1s = []
-			for d in data: 
-				_, x_hat, _, _ = model(d)
-				ae1s.append(x_hat)
-			ae1s = torch.stack(ae1s)
-			y_pred = ae1s[:, data.shape[1]-feats:data.shape[1]].view(-1, feats)
-			loss = l(ae1s, data)[:, data.shape[1]-feats:data.shape[1]].view(-1, feats)
-			if pred:
-				return loss.detach().numpy(), y_pred.detach().numpy()
-			else:
-				return loss.detach().numpy()
-	if 'Attention' in model.name:
-		l = nn.MSELoss(reduction = 'none')
-		n = epoch + 1; w_size = model.window_size
-		l1s = []; res = []
-		if training:
-			for d in data:
-				ae, ats = model(d)
-				# res.append(torch.mean(ats, axis=0).view(-1))
-				l1 = l(ae, d)
-				l1s.append(torch.mean(l1).item())
-				loss = torch.mean(l1)
-				optimizer.zero_grad()
-				loss.backward()
-				optimizer.step()
-			# res = torch.stack(res); np.save('ascores.npy', res.detach().numpy())
-			scheduler.step()
-			tqdm.write(f'Epoch {epoch},\tL1 = {np.mean(l1s)}')
-			return np.mean(l1s), optimizer.param_groups[0]['lr']
-		else:
-			ae1s, y_pred = [], []
-			for d in data: 
-				ae1 = model(d)
-				y_pred.append(ae1[-1])
-				ae1s.append(ae1)
-			ae1s, y_pred = torch.stack(ae1s), torch.stack(y_pred)
-			loss = torch.mean(l(ae1s, data), axis=1)
-			if pred:
-				return loss.detach().numpy(), y_pred.detach().numpy()
-			else:
-				return loss.detach().numpy()
-	elif 'OmniAnomaly' in model.name:
+	if 'OmniAnomaly' in model.name:
 		l = nn.MSELoss(reduction = 'mean' if training else 'none')
 		if training:
 			mses, klds = [], []
@@ -161,20 +101,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, los
 				local_bs = d.shape[0]
 				window = d.permute(1, 0, 2)
 				elem = window[-1, :, :].view(1, local_bs, feats)
-				# if not l1s and n<=1: 
-				# 	summary(model, input_data=[window, elem])
 				z = model(window, elem)
-				if prob:  # sample from probabilistic output
-					if isinstance(z, tuple):  # if z = (x1, x2)
-						x1 = z[0]; x2 = z[1]
-						x1_mu, x1_logsigma = torch.split(x1, split_size_or_sections=feats, dim=2)
-						x1 = x1_mu + torch.randn(size=x1_logsigma.size()) * torch.exp(x1_logsigma)
-						x2_mu, x2_logsigma = torch.split(x2, split_size_or_sections=feats, dim=2)
-						x2 = x2_mu + torch.randn(size=x2_logsigma.size()) * torch.exp(x2_logsigma)
-						z = (x1, x2)
-					else:  # if z = x2
-						z_mu, z_logsigma = torch.split(z, split_size_or_sections=feats, dim=2)
-						z = z_mu + torch.randn(size=z_logsigma.size())*torch.exp(z_logsigma)
 				l1 = l(z, elem) if not isinstance(z, tuple) else (1 / n) * l(z[0], elem) + (1 - 1/n) * l(z[1], elem)
 				if isinstance(z, tuple): z = z[1]
 				l1s.append(torch.mean(l1).item())
@@ -192,15 +119,6 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, los
 				window = d.permute(1, 0, 2)
 				elem = window[-1, :, :].view(1, local_bs, feats)
 				z = model(window, elem)
-				if prob:  # don't sample from probabilistic output for testing, just use mean
-					if isinstance(z, tuple):  # if z = (x1, x2)
-						x1 = z[0]; x2 = z[1]
-						x1_mu, x1_logsigma = torch.split(x1, split_size_or_sections=feats, dim=2)
-						x2_mu, x2_logsigma = torch.split(x2, split_size_or_sections=feats, dim=2)
-						z = (x1_mu, x2_mu)
-					else:  # if z = x2
-						z_mu, z_logsigma = torch.split(x1, split_size_or_sections=feats, dim=2)
-						z = z_mu
 				if isinstance(z, tuple): z = z[1]
 				l1 = l(z, elem)[0]
 				loss = torch.cat((loss, l1.view(-1, feats)), dim=0)
@@ -214,24 +132,13 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, los
 			l = nn.MSELoss(reduction = 'none')
 		elif lossname == 'Huber':
 			l = nn.HuberLoss(reduction = 'none')
-		elif lossname == 'Huber_quant':
-			l = combined_loss(model.window_size, penalty=False)
-		elif lossname == 'penalty':
-			l = combined_loss(model.window_size, penalty=True)
 		elif lossname == 'softdtw':
 			l = SoftDTW(use_cuda=torch.cuda.is_available(), normalize=True)
-			# l = SoftDTWLossPyTorch(normalize=False)
 		elif lossname == 'softdtw_norm':
 			l = SoftDTWLossPyTorch(normalize=True)
 		else:
 			raise ValueError('Loss function not implemented')
 		n = epoch + 1
-		if model.weighted:
-			mid = model.window_size % 2
-			middle = math.floor(model.window_size / 2)
-			weights = [i + 1 for i in range(middle)] + mid * [middle+1] + [i for i in range(middle, 0, -1)]
-			weights /= np.sum(weights)
-			weights = torch.tensor(weights).view(-1,1).double()
 		if training:
 			l1s = []
 			for d in data: # d.shape is [B, window_size, N]
@@ -246,22 +153,9 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, los
 					z = model(d, d_enc)[0]
 				else:
 					z = model(d, d_enc)
-				if prob:  # sample from probabilistic output
-					z_mu = z[0]
-					z_logsigma = z[1]
-					z = z_mu + torch.randn(size=z_logsigma.size())*torch.exp(z_logsigma)
 				l1 = l(z, d)
-				# if model.weighted:
-				# 	l1 = l1 * weights
 				l1s.append(torch.mean(l1).item())
-				if prob:
-					z_std = torch.exp(z_logsigma)
-					loss = torch.mean(l1/z_std) + torch.mean(z_std)
-					# loss = torch.mean(l1)
-					# loss_fct = torch.nn.GaussianNLLLoss(eps=1e-6, reduction='mean')
-					# loss = loss_fct(z, elem, torch.exp(2*z_logsigma))
-				else:
-					loss = torch.mean(l1)
+				loss = torch.mean(l1)
 				optimizer.zero_grad()
 				loss.backward(retain_graph=True)
 				optimizer.step()
@@ -270,12 +164,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, los
 		else:
 			l = nn.MSELoss(reduction = 'none')  # always use MSE for testing
 			z_all = torch.empty(0)
-			if model.weighted:
-				# loss = torch.zeros(size=(model.batch * model.window_size, feats))
-				# new test: get loss according to position in window
-				loss = torch.zeros(size=(model.window_size, feats))
-			else:
-				loss = torch.empty(0)
+			loss = torch.empty(0)
 			for i, d in enumerate(data): # d.shape is [B, window_size, N]
 				local_bs = d.shape[0]
 				if enc_feats > 0:
@@ -287,58 +176,18 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, los
 					z = model(d, d_enc)[0]
 				else:
 					z = model(d, d_enc)
-				if prob:  # don't sample from probabilistic output for testing, just use mean
-					z_mu = z[0]
-					z_logsigma = z[1]
-					z = z_mu
-				if lossname in ['Huber_quant', 'penalty']:
-					z_out, _, _ = torch.split(z, model.window_size, dim=1)  # when using combined_loss
-				else:
-					z_out = z
-				l1 = l(z_out, d)
-				# else:
-				# l1 = ((z_out - d) * (z75 - z25))**2
-				# l1 = torch.abs(l(z, d))
-				# loss_fct = torch.nn.GaussianNLLLoss(eps=1e-6, reduction='none')
-				# l1 = loss_fct(z, elem, torch.exp(2*z_logsigma))
-				if model.weighted:
-					# l1_weighted = l1 * weights 
-					# idx = i * local_bs * model.test_step_size
-					# for j in range(local_bs):
-					# 	start = idx +  j*model.test_step_size
-					# 	stop = start + model.window_size	
-					# 	loss[start:stop] += l1_weighted[j]
-					# print(start, stop, idx)
-					# new test: get loss according to position in window
-					l1s = l1.mean(dim=0)
-					loss += l1s
-				else:
-					loss = torch.cat((loss, l1), dim=0)
-					# loss = torch.cat((loss, l1.reshape(-1, feats)), dim=0)
+				l1 = l(z, d)
+				loss = torch.cat((loss, l1), dim=0)
 				if pred:
 					z_all = torch.cat((z_all, z), dim=0)
-					# z_all = torch.cat((z_all, z.reshape(-1, feats)), dim=0)
-			if not model.weighted:
-				loss = loss.view(-1, feats)
-				# loss = loss.unsqueeze(1)
-			# if prob:
-			# 	z_std = torch.exp(z_logsigma)
-			# 	loss = loss / z_std  #+ z_std
+			loss = loss.view(-1, feats)
 			if pred:
-				if lossname in ['Huber_quant', 'penalty']:
-					z_all, z25, z75 = torch.split(z_all, model.window_size, dim=1)
-					z_all = z_all.reshape(-1, feats)
-					z25 = z25.reshape(-1, feats)
-					z75 = z75.reshape(-1, feats)	
-					return loss.detach().numpy(), z_all.detach().numpy(), z25.detach().numpy(), z75.detach().numpy()
-				else:
-					z_all = z_all.reshape(-1, feats)
+				z_all = z_all.reshape(-1, feats)
 				return loss.detach().numpy(), z_all.detach().numpy()  
 			else:
 				return loss.detach().numpy()
 	elif 'LSTM_AE' in model.name:
 		l = nn.MSELoss(reduction = 'none')
-		bs = model.batch # if training else len(data)
 		n = epoch + 1
 		if training:
 			l1s = []
@@ -351,7 +200,6 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, los
 				loss.backward(retain_graph=True)
 				optimizer.step()
 			scheduler.step()
-			# tqdm.write(f'Epoch {epoch},\tL1 = {np.mean(l1s)}')
 			return np.mean(l1s), optimizer.param_groups[0]['lr']
 		else:
 			loss = torch.empty(0)
@@ -367,58 +215,13 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, los
 				return loss.detach().numpy(), z_all.detach().numpy()
 			else:
 				return loss.detach().numpy()
-	else:
-		y_pred = model(data)
-		loss = l(y_pred, data)
-		if training:
-			tqdm.write(f'Epoch {epoch},\tMSE = {loss}')
-			optimizer.zero_grad()
-			loss.backward()
-			optimizer.step()
-			scheduler.step()
-			return loss.item(), optimizer.param_groups[0]['lr']
-		else:
-			if pred:
-				return loss.detach().numpy(), y_pred.detach().numpy()
-			else:
-				return loss.detach().numpy()
-
-
-def local_pot(loss, lossT, labels, q=1e-5, plot_path=None):
-	# get anomaly labels
-	df_res_local = pd.DataFrame()
-	preds = []
-	for i in range(loss.shape[1]):
-		lt, l, ls = lossT[:, i], loss[:, i], labels[:, i]  	
-		result_local, pred = pot_eval(lt, l, ls, plot_path, f'dim{i}', q=q)
-		preds.append(pred)
-		df_res = pd.DataFrame.from_dict(result_local, orient='index').T
-		df_res_local = pd.concat([df_res_local, df_res], ignore_index=True)
-	preds = np.array(preds).T
-	preds = preds.astype(int)
-	return preds, df_res_local
-
-
-def local_anomaly_labels(preds, labels, q=1e-5, plot_path=None, nb_adim=1):
-	labelspred = (np.sum(preds, axis=1) >= nb_adim) + 0
-
-	if plot_path is not None:
-		plot_labels(plot_path, f'labels_adim{nb_adim}', y_pred=labelspred, y_true=labels)
-	
-	result_local = calc_point2point(predict=labelspred, actual=labels)
-	result_local1 = {'f1': result_local[0], 'precision': result_local[1], 'recall': result_local[2], 
-				'TP': result_local[3], 'TN': result_local[4], 'FP': result_local[5], 'FN': result_local[6], 
-				'ROC/AUC': result_local[7], 'MCC': result_local[8]}
-	result_local1.update({'detection level q': q})
-	print(f'local results with {nb_adim} anomalous dimensions for anomaly')
-	pprint(result_local1)
-
-	return labelspred, result_local1
-
+			
 
 if __name__ == '__main__':
-	print(args, '\n')
-	print('CUDA available:', torch.cuda.is_available())
+	args = parse_arguments()
+	print('Arguments:\n')
+	pprint(vars(args))
+	print('\nCUDA available:', torch.cuda.is_available())
 	print("MPS (Apple Silicon GPU) is available:", torch.backends.mps.is_available(), '\n')
 
 	# define path for results, checkpoints & plots & create directories
@@ -435,18 +238,15 @@ if __name__ == '__main__':
 	os.makedirs(plot_path, exist_ok=True)
 	os.makedirs(res_path, exist_ok=True)
 
+	# create data sets
 	train = MyDataset(args.dataset, args.window_size, args.step_size, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=args.k)
-	if args.weighted:
-		test = MyDataset(args.dataset, args.window_size, args.step_size, args.model, flag='test', feats=args.feats, less=args.less, enc=args.enc, k=-1)
-		train_test = MyDataset(args.dataset, args.window_size, args.step_size, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=-1)
-	else:
-		test = MyDataset(args.dataset, args.window_size, args.window_size, args.model, flag='test', feats=args.feats, less=args.less, enc=args.enc, k=-1)
-		train_test = MyDataset(args.dataset, args.window_size, args.window_size, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=-1)
+	test = MyDataset(args.dataset, args.window_size, args.window_size, args.model, flag='test', feats=args.feats, less=args.less, enc=args.enc, k=-1)
+	train_test = MyDataset(args.dataset, args.window_size, args.window_size, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=-1)
 	labels = test.get_labels()
 	
-	print('train set', train.__len__(), train.data.shape)
-	print('test set', test.__len__(), test.data.shape)
-	print('labels', labels.shape)
+	print('train shape with windows:', train.data.shape)
+	print('test shape with windows:', test.data.shape)
+	print('labels shape:', labels.shape)
 	
 	if args.k > 0:
 		valid = MyDataset(args.dataset, args.window_size, args.step_size, args.model, flag='valid', feats=args.feats, less=args.less, enc=args.enc, k=args.k)
@@ -455,11 +255,15 @@ if __name__ == '__main__':
 	feats = train.feats
 	enc_feats = train.enc_feats
 	
-	if args.model in ['MERLIN']:
-		data_loader_test = DataLoader(test, batch_size=24, shuffle=False)
-		eval(f'run_{args.model.lower()}(data_loader_test, labels, args.dataset)')
-	model, optimizer, scheduler, epoch, accuracy_list = load_model(args.model, args.dataset, feats, 
-			args.window_size, args.step_size, args.d_model, args.test, checkpoints_path, args.loss, args.prob)
+	# load model
+	model, optimizer, scheduler, epoch, accuracy_list = load_model(modelname=args.model,
+																dataset=args.dataset, 
+																dims=feats, 
+																window_size=args.window_size, 
+																d_model=args.d_model, 
+																test=args.test, 
+																checkpoints_path=checkpoints_path, 
+																loss=args.loss)
 
 	# Calculate and print the number of parameters
 	total_params = sum(p.numel() for p in model.parameters())
@@ -468,8 +272,7 @@ if __name__ == '__main__':
 
 	# Create data loader
 	data_loader_train = DataLoader(train, batch_size=model.batch, shuffle=False)
-	if args.model not in ['MERLIN']:
-		data_loader_test = DataLoader(test, batch_size=model.batch, shuffle=False)
+	data_loader_test = DataLoader(test, batch_size=model.batch, shuffle=False)
 	data_loader_train_test = DataLoader(train_test, batch_size=model.batch, shuffle=False)
 	if args.k > 0:
 		data_loader_valid = DataLoader(valid, batch_size=model.batch, shuffle=False)
@@ -492,12 +295,12 @@ if __name__ == '__main__':
 
 		sample_batch = next(iter(data_loader_train))
 		f.write('\nModel Summary:\n')
-		# if model.name == 'TranAD':
-		# 	window = sample_batch.permute(1, 0, 2)
-		# 	elem = window[-1, :, :].view(1, -1, feats)
-		# 	f.write(str(summary(model, input_data=[window, elem], depth=5, verbose=0)))
-		# else:
-		# 	f.write(str(summary(model, input_data=sample_batch, depth=5, verbose=0)))
+		if model.name == 'TranAD':
+			window = sample_batch.permute(1, 0, 2)
+			elem = window[-1, :, :].view(1, -1, feats)
+			f.write(str(summary(model, input_data=[window, elem], depth=5, verbose=0)))
+		else:
+			f.write(str(summary(model, input_data=sample_batch, depth=5, verbose=0)))
 		
 	### Training phase
 	if not args.test:
@@ -508,10 +311,10 @@ if __name__ == '__main__':
 		num_epochs = args.epochs; e = epoch + 1; start_time = time()
 		for e in tqdm(list(range(epoch+1, epoch+num_epochs+1))):
 			lossT, lr = backprop(e, model, data_loader_train, feats, optimizer, scheduler, 
-						training=True, lossname=args.loss, enc_feats=enc_feats, prob=args.prob)
+						training=True, lossname=args.loss, enc_feats=enc_feats)
 			if args.k > 0:
 				lossV = backprop(e, model, data_loader_valid, feats, optimizer, scheduler, 
-				training=False, lossname=args.loss, enc_feats=enc_feats, prob=args.prob)
+				training=False, lossname=args.loss, enc_feats=enc_feats)
 				lossV = np.mean(lossV)
 				if lossV < min_lossV:
 					min_lossV = lossV
@@ -542,148 +345,51 @@ if __name__ == '__main__':
 	print(f'{color.HEADER}Testing {args.model} on {args.dataset}{color.ENDC}')
 
 	### Scores
-	# lossT = backprop(-1, model, data_loader_train_test, feats, optimizer, scheduler, 
-	# 			  training=False, lossname=args.loss, enc_feats=enc_feats, prob=args.prob, pred=False)  # need anomaly scores on training data for POT
-	if args.loss in ['Huber_quant', 'penalty']:
-		lossT, yT, y25T, y75T = backprop(-1, model, data_loader_train_test, feats, optimizer, scheduler, 
-								training=False, lossname=args.loss, enc_feats=enc_feats, prob=args.prob, pred=True)  # need anomaly scores on training data for POT
-		loss, y_pred, y25, y75 = backprop(-1, model, data_loader_test, feats, optimizer, scheduler, 
-								training=False, lossname=args.loss, enc_feats=enc_feats, prob=args.prob, pred=True)	
-	else:
-		lossT = backprop(-1, model, data_loader_train_test, feats, optimizer, scheduler, 
-				  training=False, lossname=args.loss, enc_feats=enc_feats, prob=args.prob, pred=False)  # need anomaly scores on training data for POT
-		loss, y_pred = backprop(-1, model, data_loader_test, feats, optimizer, scheduler, 
-						  training=False, lossname=args.loss, enc_feats=enc_feats, prob=args.prob, pred=True)
+	lossT = backprop(-1, model, data_loader_train_test, feats, optimizer, scheduler, 
+				training=False, lossname=args.loss, enc_feats=enc_feats, pred=False)  # need anomaly scores on training data for POT
+	loss, y_pred = backprop(-1, model, data_loader_test, feats, optimizer, scheduler, 
+						training=False, lossname=args.loss, enc_feats=enc_feats, pred=True)
 
-	# just for studies_posinwindow
-	# fig, axs = plt.subplots(nrows=feats, ncols=1, figsize=(16, feats * 2))
-	# for dim in range(feats):
-	# 	if feats == 1:
-	# 		ax = axs
-	# 	else:
-	# 		ax = axs[dim]
-	# 	ax.plot(lossT[:, dim], '-o', label='train loss')
-	# 	ax.plot(loss[:, dim], '-o', label='test loss')
-	# 	if args.window_size > 20:
-	# 		ax.set_xticks(np.arange(0, args.window_size, 10))
-	# 	else:
-	# 		ax.set_xticks(np.arange(0, args.window_size))
-	# 	ax.set_ylabel(f'Dim {dim}', rotation=0, ha='right', rotation_mode='default', labelpad=10)
-	# 	ax.legend(loc='upper right')
-	# if feats == 1:
-	# 	axs.set_xlabel('Position in time window')
-	# else:
-	# 	axs[-1].set_xlabel('Position in time window')
-	# fig.subplots_adjust(hspace=0.2)  
-	# fig.align_ylabels(axs)
-	# plt.tight_layout()
-	# plt.savefig(f'studies_posinwindow/{args.model}_{args.dataset}_loss_posinw_window{args.window_size}.png', dpi=300)
-	# plt.close()
-
-	# # Plot average train and test loss over all dimensions
-	# plt.figure(figsize=(10, 6))
-	# plt.plot(np.mean(lossT, axis=1), '-o', label='Average train loss')
-	# plt.plot(np.mean(loss, axis=1), '-o', label='Average test loss')
-	# plt.xlabel('Position in time window')
-	# plt.ylabel('Average loss across features')
-	# plt.legend(loc='upper right')
-	# plt.tight_layout()
-	# plt.savefig(f'studies_posinwindow/{args.model}_{args.dataset}_avgloss_posinw_window{args.window_size}.png', dpi=300)
-	# plt.close()
-	# print('plot saved')
-	# sys.exit()
-
-	# if feats <= 30:
-	# 	testOO = test.get_complete_data_wpadding()
-	# 	nolabels = np.zeros_like(loss)
-	# 	print(len(testOO), len(y_pred), len(loss))
-	# 	plotter(plot_path, testOO, y_pred, loss, nolabels, test.get_ideal_lengths(), name='output_padded')
+	if feats <= 30:
+		testOO = test.get_complete_data_wpadding()
+		nolabels = np.zeros_like(loss)
+		plotter(plot_path, testOO, y_pred, loss, nolabels, test.get_ideal_lengths(), name='output_padded')
 	
-	print(lossT.shape, loss.shape, labels.shape)
+	# print(f'check data shapes before removing padding:'
+	#    f'\ntrain loss {lossT.shape}, test loss{loss.shape}, labels {labels.shape}\n')
+
 	if 'iTransformer' in model.name or model.name in ['LSTM_AE', 'Transformer']:
 		# cut out the padding from test data, loss tensors
-		lossT_tmp, loss_tmp, y_pred_tmp, yT_tmp = [], [], [], []
-		y25_tmp, y75_tmp, y25T_tmp, y75T_tmp = [], [], [], []
-		print(test.get_ts_lengths(), np.sum(test.get_ts_lengths()), len(test.get_ts_lengths()))
-		print(test.get_ideal_lengths(), np.sum(test.get_ideal_lengths()), len(test.get_ideal_lengths()))
+		lossT_tmp, loss_tmp, y_pred_tmp = [], [], []
+		# print(test.get_ts_lengths(), np.sum(test.get_ts_lengths()), len(test.get_ts_lengths()))
+		# print(test.get_ideal_lengths(), np.sum(test.get_ideal_lengths()), len(test.get_ideal_lengths()))
 		start = 0
 		for i, l in enumerate(test.get_ts_lengths()):
 			loss_tmp.append(loss[start:start+l])
 			y_pred_tmp.append(y_pred[start:start+l])
-			if args.loss in ['Huber_quant', 'penalty']:
-				y25_tmp.append(y25[start:start+l])
-				y75_tmp.append(y75[start:start+l])
 			start += test.get_ideal_lengths()[i]
 		
 		start = 0
 		for i, l in enumerate(train_test.get_ts_lengths()):
 			lossT_tmp.append(lossT[start:start+l])
-			if args.loss in ['Huber_quant', 'penalty']:
-				yT_tmp.append(yT[start:start+l])
-				y25T_tmp.append(y25[start:start+l])
-				y75T_tmp.append(y75[start:start+l])
 			start += train_test.get_ideal_lengths()[i]
 
 		lossT = np.concatenate(lossT_tmp, axis=0)
 		loss = np.concatenate(loss_tmp, axis=0)
 		y_pred = np.concatenate(y_pred_tmp, axis=0)
-		if args.loss in ['Huber_quant', 'penalty']:
-			yT = np.concatenate(yT_tmp, axis=0)
-			y25 = np.concatenate(y25_tmp, axis=0)
-			y75 = np.concatenate(y75_tmp, axis=0)
-			y25T = np.concatenate(y25T_tmp, axis=0)
-			y75T = np.concatenate(y75T_tmp, axis=0)
-	print(lossT.shape, loss.shape, labels.shape)
+
+	# print(f'Check data shapes after removing padding:'
+	#    f'\ntrain loss {lossT.shape}, test loss{loss.shape}, labels {labels.shape}\n')
 	train_loss = np.mean(lossT)
 	test_loss = np.mean(loss)
 
-	### Plot curves
-	if feats <= 40:
-		testO = test.get_complete_data()
-		print(len(testO), len(y_pred), len(labels))
-		plotter(plot_path, testO, y_pred, loss, labels, test.get_ts_lengths(), name='output')
-
-	# # if step_size > 1, define truth labels per window instead of per time stamp, can also just use non-overlapping windows for testing
-	# if args.step_size > 1:
-	# 	print(labels.shape, labels[labels[:,0]==1].shape, labels[labels[:,0]==0].shape)
-	# 	nb_windows = (len(labels) - args.window_size) // args.step_size
-	# 	labels = np.array([(np.sum(labels[i*args.step_size:i*args.step_size+args.window_size], axis=0) >= 1) + 0 for i in range(nb_windows)])
-	# 	print(labels.shape, labels[labels[:,0]==1].shape, labels[labels[:,0]==0].shape)
-
-
-	# test using IQR as anomaly score
-	# IQR_50 = np.abs(y7,5 - y25) 
-	# IQR_50T = np.abs(y75T - y25T)
-	# plot_correlation_anomalyscore(loss, IQR_50, labels, plot_path, name='norm0')
-	# IQR_50 = (np.abs(y75 - y25) / 2) **2
-	# IQR_50 /= np.max(IQR_50)
-	# IQR_50 = np.maximum( np.abs(y_pred-y75), np.abs(y_pred-y25) )
-	# IQR_50T = np.maximum( np.abs(yT-y75T), np.abs(yT-y25T) )
-	# IQR_50T /= np.max(IQR_50T)
-	# loss += IQR_50/2
-	# lossT += IQR_50T/2
-	# plot_correlation_anomalyscore(loss, IQR_50, labels, plot_path, name='norm1')
-	# IQR_50 = np.maximum( np.abs(y_pred-y75), np.abs(y_pred-y25))
-	# plot_correlation_anomalyscore(loss, IQR_50, labels, plot_path, name='norm2')
-	# IQR_50 = np.minimum( np.abs(y_pred-y75), np.abs(y_pred-y25))
-	# plot_correlation_anomalyscore(loss, IQR_50, labels, plot_path, name='norm3')
-
-	# plot_correlation_anomalyscore(loss, IQR_50, labels, plot_path, name='new')
-
-	# loss = np.abs(y75 - y25)
-	# loss = np.maximum( np.abs(y_pred-y75), np.abs(y_pred-y25) )
-	# lossT = np.abs(y75T - y25T)
-	# lossT = np.maximum( np.abs(yT-y75T), np.abs(yT-y25T) )
-
-
-	# anomaly labels with IQR
-	# pred_IQR, res_local_IQR = local_pot(IQR_50, IQR_50T, labels, args.q, plot_path)
+	# compress true labels to 1D
 	true_labels = (np.sum(labels, axis=1) >= 1) + 0
-	# labelspred_loc_IQR, result_local_IQR = local_anomaly_labels(pred_IQR, true_labels, args.q, plot_path, nb_adim=1)
-	# labelspred_maj_IQR, result_local_IQR_maj = local_anomaly_labels(pred_IQR, true_labels, args.q, plot_path, nb_adim=math.ceil(labels.shape[1] / 2))
-	# IQR_50TFinal, IQR_50Final = np.mean(IQR_50T, axis=1), np.mean(IQR_50, axis=1)
-	# result_global_IQR, pred_global_IQR = pot_eval(IQR_50Final, IQR_50Final, true_labels, plot_path, f'all_dim_IQR', q=args.q)
-	# labelspred_glob_IQR = (pred_global_IQR >= 1) + 0
+
+	# plot time series with padding
+	if feats <= 30:
+		testO = test.get_complete_data()
+		plotter(plot_path, testO, y_pred, loss, labels, test.get_ts_lengths(), name='output')
 
 	plot_MSE_vs_ascore(plot_path, loss, true_labels)
 
@@ -691,12 +397,13 @@ if __name__ == '__main__':
 	preds, df_res_local = local_pot(loss, lossT, labels, args.q, plot_path)
 	true_labels = (np.sum(labels, axis=1) >= 1) + 0
 	# local anomaly labels
-	labelspred, result_local1 = local_anomaly_labels(preds, true_labels, args.q, plot_path, nb_adim=1)
+	labelspred, result_local1 = local_anomaly_labels(preds, true_labels, args.q, plot_path, nb_adim=1)  # inclusive OR
 	majority = math.ceil(labels.shape[1] / 2)	# do majority voting over dimensions for local results instead of inclusive OR
 	labelspred_maj, result_local2 = local_anomaly_labels(preds, true_labels, args.q, plot_path, nb_adim=majority)
 	labelspred_all = []
 	results_all = pd.DataFrame()
 
+	# define anomaly starting from i anomalous dimensions, scan over i (between 1 and feats)
 	if feats > 20:
 		nb_adim = np.unique(np.concatenate((np.arange(1, 11), np.arange(20, feats, 10), [feats])))
 	else:
@@ -706,120 +413,49 @@ if __name__ == '__main__':
 		labelspred_all.append(lpred)
 		results_all = pd.concat([results_all, pd.DataFrame.from_dict(res, orient='index').T], ignore_index=True)
 	
-	results_all.index = nb_adim
-	results_all.to_csv(f'{res_path}/res_local_all.csv')
 
-	# # global anomaly labels with weighted average
-	# if args.loss in ['Huber_quant', 'penalty']:
-	# 	IQR_50T = np.abs(y75T - y25T)
-	# 	factorsT = 1 / IQR_50T
-	# 	normT = np.mean(factorsT, axis=0)
-	# 	print(normT.shape, factorsT.shape)
-	# 	factorsT = factorsT / normT
-	# 	divT = lossT * factorsT 
-	# 	IQR_50 = np.abs(y75 - y25)
-	# 	factors = 1 / IQR_50
-	# 	norm = np.sum(factors, axis=1)
-	# 	factors = factors / norm[:, np.newaxis]
-	# 	div = loss * factors
-	# 	lossTfinal_weighted, lossFinal_weighted = np.sum(divT, axis=1), np.mean(div, axis=1)
-	# 	true_labels = (np.sum(labels, axis=1) >= 1) + 0
-	# 	result_global_weighted, pred2 = pot_eval(lossTfinal_weighted, lossFinal_weighted, 
-	# 							  true_labels, plot_path, f'all_dim_weighted', q=args.q)
-	# 	labelspred_glob_weighted = (pred2 >= 1) + 0
-		
 	# global anomaly labels
 	lossTfinal, lossFinal = np.mean(lossT, axis=1), np.mean(loss, axis=1)
 	true_labels = (np.sum(labels, axis=1) >= 1) + 0
 	result_global, pred2 = pot_eval(lossTfinal, lossFinal, true_labels, plot_path, f'all_dim', q=args.q)
 	labelspred_glob = (pred2 >= 1) + 0
-
-	plot_labels(plot_path, 'labels_global', y_pred=labelspred_glob, y_true=true_labels)
 	result_global.update(hit_att(loss, labels))
 	result_global.update(ndcg(loss, labels))
 	if not args.test:
 		result_global.update({'train_time': train_time})
 	result_global.update({'detection_level_q': args.q})
 	result_global.update({'train_loss': train_loss, 'test_loss': test_loss})
-	print('\nglobal results') 
+	print(f'{color.HEADER}Global results with {feats} anomalous dimensions for anomaly{color.ENDC}') 
 	pprint(result_global)
 
-	plot_metrics(plot_path, ['local (incl. OR)', 'local (maj. voting)', 'global', 'IQR (incl. OR)', 'IQR (maj. voting)', 'IQR global'], 
-			  y_pred=[labelspred, labelspred_maj, labelspred_glob],
-			#   , labelspred_loc_IQR, labelspred_maj_IQR, labelspred_glob_IQR ], 
-			y_true=true_labels)
-
-	# compare local & global anomaly labels
-	# compare_labels(plot_path, pred_labels=[labelspred, labelspred_maj, labelspred_glob], true_labels=true_labels, 
-	# 			plot_labels=['Local anomaly\n(inclusive OR)', 'Local anomaly\n(majority voting)', 'Global anomaly'], 
-	# 			name='_all')
+	# more plots
+	plot_labels(plot_path, 'labels_global', y_pred=labelspred_glob, y_true=true_labels)
+	plot_metrics(plot_path, name=['local_incl_OR', 'local_maj_voting', 'global'], 
+			y_pred=[labelspred, labelspred_maj, labelspred_glob], y_true=true_labels)
+	compare_labels(plot_path, pred_labels=[labelspred, labelspred_maj, labelspred_glob], true_labels=true_labels, 
+				plot_labels=['Local anomaly\n(inclusive OR)', 'Local anomaly\n(majority voting)', 'Global'], 
+				name='_all')
 	
-	# combination of MSE + IQR anomaly labels
-	# comb_labels_loc = ((labelspred + labelspred_loc_IQR) >= 1) + 0
-	# comb_labels_maj = ((labelspred_maj + labelspred_maj_IQR) >= 1) + 0
-	# comb_labels_glob = ((labelspred_glob + labelspred_glob_IQR) >= 1) + 0
-	# plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, comb_labels_loc, labels, name='_local_comb')
-	# plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, comb_labels_maj, labels, name='_local_comb_maj')
-	# plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, comb_labels_glob, labels, name='_global_comb')
-	# plot_metrics(plot_path, ['Comb. (incl. OR)', 'Comb. (maj. voting)', 'Comb. global'],
-	# 		  y_pred=[comb_labels_loc, comb_labels_maj, comb_labels_glob],
-	# 		  y_true=true_labels)
-
 	if feats <= 40:
-		if args.loss in ['Huber_quant', 'penalty']:
-			plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred, labels, name='_local_or')
-			plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred_maj, labels, name='_local_maj')
-			plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred_glob, labels, name='_global')
-			# plotter2(plot_path, testO, [y_pred, y25, y75], loss, args.dataset, labelspred_glob_weighted, labels, name='_global_weighted')
-		else:
-			plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred, labels, name='_local_or')
-			plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred_maj, labels, name='_local_maj')
-			plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred_glob, labels, name='_global')
+		plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred, labels, name='_local_or')
+		plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred_maj, labels, name='_local_maj')
+		plotter2(plot_path, testO, y_pred, loss, args.dataset, labelspred_glob, labels, name='_global')
 
-	# saving results
+	### saving results
+	# results for different anomaly definitions, scan over i dimensions (between 1 and feats)
+	results_all.index = nb_adim  
+	results_all.to_csv(f'{res_path}/res_local_all.csv')
+
+	# results when using individual dimensions for anomaly labels, incl. OR, majority voting or average to combine them
 	df_res_global = pd.DataFrame.from_dict(result_global, orient='index').T
 	df_res_global.index = ['global']
 	result_local1 = pd.DataFrame.from_dict(result_local1, orient='index').T
 	result_local2 = pd.DataFrame.from_dict(result_local2, orient='index').T
 	result_local1.index = ['local_all']
 	result_local2.index = ['local_all_maj']
-	# result_local1_IQR = pd.DataFrame.from_dict(result_local_IQR, orient='index').T
-	# result_local2_IQR = pd.DataFrame.from_dict(result_local_IQR_maj, orient='index').T
-	# result_global_IQR = pd.DataFrame.from_dict(result_global_IQR, orient='index').T
-	# result_local1_IQR.index = ['local_all_IQR']
-	# result_local2_IQR.index = ['local_all_maj_IQR']
-	# result_global_IQR.index = ['global_IQR']
-	# result_local = calc_point2point(predict=comb_labels_loc, actual=true_labels)
-	# result_local_comb = {'f1': result_local[0], 'precision': result_local[1], 'recall': result_local[2], 
-	# 			'TP': result_local[3], 'TN': result_local[4], 'FP': result_local[5], 'FN': result_local[6], 
-	# 			'ROC/AUC': result_local[7], 'MCC': result_local[8]}
-	# results_local_comb = pd.DataFrame.from_dict(result_local_comb, orient='index').T
-	# results_local_comb.index = ['local_comb']
-	# result_local = calc_point2point(predict=comb_labels_maj, actual=true_labels)
-	# result_local_comb_maj = {'f1': result_local[0], 'precision': result_local[1], 'recall': result_local[2], 
-	# 			'TP': result_local[3], 'TN': result_local[4], 'FP': result_local[5], 'FN': result_local[6], 
-	# 			'ROC/AUC': result_local[7], 'MCC': result_local[8]}
-	# results_local_comb_maj = pd.DataFrame.from_dict(result_local_comb_maj, orient='index').T
-	# results_local_comb_maj.index = ['local_comb_maj']
-	# result_local = calc_point2point(predict=comb_labels_glob, actual=true_labels)
-	# result_global_comb = {'f1': result_local[0], 'precision': result_local[1], 'recall': result_local[2], 
-	# 			'TP': result_local[3], 'TN': result_local[4], 'FP': result_local[5], 'FN': result_local[6], 
-	# 			'ROC/AUC': result_local[7], 'MCC': result_local[8]}
-	# results_global_comb = pd.DataFrame.from_dict(result_global_comb, orient='index').T
-	# results_global_comb.index = ['global_comb']
-	if args.loss in ['Huber_quant', 'penalty']:
-		# result_global_weighted = pd.DataFrame.from_dict(result_global_weighted, orient='index').T
-		# result_global_weighted.index = ['global_weighted']
-		df_res_local = pd.concat([df_res_local, result_local1, result_local2]) #, result_local1_IQR, result_local2_IQR, result_global_IQR])
-	else:
-		df_res_local = pd.concat([df_res_local, result_local1, result_local2]) 
-								# result_local1_IQR, result_local2_IQR, result_global_IQR,
-								# results_local_comb, results_local_comb_maj, results_global_comb])
-	df_res = pd.concat([df_res_local, result_local1, result_local2, 
-								# result_local1_IQR, result_local2_IQR, result_global_IQR,
-								# results_local_comb, results_local_comb_maj, results_global_comb,
-								df_res_global])
-	df_labels = pd.DataFrame( {'local_or': labelspred, 'local_maj': labelspred_maj, 'global': labelspred_glob} )
-
+	df_res = pd.concat([df_res_local, result_local1, result_local2, df_res_global])
 	df_res.to_csv(f'{res_path}/res.csv')	
+
+	# labels predicted for 3 different anomaly label methods
+	df_labels = pd.DataFrame( {'local_or': labelspred, 'local_maj': labelspred_maj, 'global': labelspred_glob} )
 	df_labels.to_csv(f'{res_path}/pred_labels.csv', index=False)

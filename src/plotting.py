@@ -1,10 +1,11 @@
+import os
+import numpy as np
+import mplhep as hep
 import matplotlib.pyplot as plt
 import matplotlib
 from matplotlib.backends.backend_pdf import PdfPages
-import os, torch
-import numpy as np
 from sklearn.metrics import *
-import mplhep as hep
+
 
 matplotlib.use('Agg')
 # plt.style.use(['science', 'ieee'])
@@ -37,7 +38,7 @@ def add_atlas(ax, lines, status='Internal'):
     left_edge = ax.get_position().x0 - 0.12
     # top = 0.895
     # spacing = 0.057
-    top = 2.2 #1.95 # 0.91
+    top = 2.2 
     spacing = 0.3
 
 	# Write text
@@ -67,6 +68,7 @@ def plot_accuracies(accuracy_list, folder):
 	plt.clf()
 
 def plot_losses(accuracy_list, folder):
+	# plot evolution of training and validation loss
 	os.makedirs(folder, exist_ok=True)
 	lossT = [i[0] for i in accuracy_list]
 	lossV = [i[1] for i in accuracy_list]
@@ -92,6 +94,15 @@ def smooth(y, box_pts=1):
     return y_smooth
 
 def plotter(path, y_true, y_pred, ascore, labels, ts_length=[], name='output'):
+	"""
+	plot predicted, true time series, anomaly scores and predicted + true labels (if available)
+	Parameters:
+		path (str): Path to save the plots.
+		y_true (np.ndarray): True time series data.
+		y_pred (np.ndarray): Predicted or reconstructed time series data.
+		ascore (np.ndarray): Anomaly scores.
+		labels (np.ndarray): True labels.		
+	"""
 	os.makedirs(path, exist_ok=True)
 	# if 'TranAD' in path: y_true = torch.roll(y_true, 1, 0)
 	pdf = PdfPages(f'{path}/{name}.pdf')
@@ -131,6 +142,19 @@ def plotter(path, y_true, y_pred, ascore, labels, ts_length=[], name='output'):
 	pdf.close()
 
 def plotter2(path, x_true, x_pred, ascore, dataset, y_pred=None, y=None, name=''):
+	"""
+	plot predicted, true time series, anomaly scores and predicted + true labels (if available)
+
+	Parameters:
+		path (str): Path to save the plots.
+		x_true (np.ndarray): True time series data.
+		x_pred (np.ndarray): Predicted or reconstructed time series data.
+		ascore (np.ndarray): Anomaly scores.
+		dataset (str): Name of the dataset.
+		y_pred (np.ndarray, optional): Predicted labels. Defaults to None.
+		y (np.ndarray, optional): True labels. Defaults to None.
+		name (str, optional): Name for the output file. Defaults to ''.
+	"""
 	os.makedirs(path, exist_ok=True)
 	if dataset in features_dict.keys():
 		features = features_dict[dataset]
@@ -188,6 +212,7 @@ def plotter2(path, x_true, x_pred, ascore, dataset, y_pred=None, y=None, name=''
 	plt.close()
 
 def plot_labels(path, name, y_pred, y_true):
+	# plot predicted and true labels
 	os.makedirs(path, exist_ok=True)
 	fig = plt.figure(figsize=(12, 4))
 	plt.plot(smooth(y_pred), 'o', label='Predicted anomaly')
@@ -204,6 +229,7 @@ def plot_labels(path, name, y_pred, y_true):
 	plt.close()
 
 def plot_ascore(path, name, ascore, labels):
+	# plot anomaly score as function of timestamps
 	os.makedirs(path, exist_ok=True)
 	
 	if ascore.ndim != 1:

@@ -139,6 +139,7 @@ class MyDataset(Dataset):
             self.labels = labels
 
     def __load_ATLAS_DQM_TS_data__(self, type='train'):
+        # specific loading function for ATLAS_DQM_TS dataset (not public)
         folder = os.path.join('processed', self.data_name)
         if not os.path.exists(folder):
             raise Exception('Processed Data not found.')
@@ -217,10 +218,10 @@ class MyDataset(Dataset):
             for i, g in enumerate(data): 
                 if i >= self.window_size: w = data[i-self.window_size:i]
                 else: w = np.concatenate([data[:1].repeat(self.window_size-i, 0), data[0:i]])
-                windows.append(w if self.modelname in ['TranAD', 'Attention', 'iTransformer', 'Transformer', 'LSTM_AE'] else w.reshape(-1))
+                windows.append(w if self.modelname in ['TranAD', 'iTransformer', 'Transformer', 'LSTM_AE'] else w.reshape(-1))
             windows = np.stack(windows)
             self.data = windows
-            if self.modelname not in ['TranAD', 'Attention', 'iTransformer', 'Transformer', 'LSTM_AE', 'None', 'USAD']:
+            if self.modelname not in ['TranAD','iTransformer', 'Transformer', 'LSTM_AE', 'None', 'USAD']:
                 self.feats = windows.shape[1]
 
     def __len__(self):
@@ -256,7 +257,10 @@ class MyDataset(Dataset):
     
     def get_complete_data_wpadding(self):
         # for plots or if we want to use unsliced data with padding
-        return self.data[:, :, self.enc_feats:].reshape(-1, self.feats)
+        if self.modelname in ['TranAD', 'iTransformer', 'Transformer', 'LSTM_AE']:
+            return self.data[:, :, self.enc_feats:].reshape(-1, self.feats)
+        else:
+            return self.data[:, self.enc_feats:].reshape(-1, self.feats)
 
 
 if __name__ == '__main__':
