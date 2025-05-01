@@ -17,8 +17,7 @@ Preprocess all datasets except for IEEECIS using the command
 ```bash
 python3 preprocess.py creditcard GECCO SMAP MSL SWaT WADI SMD UCR 
 ```
-Distribution rights to some datasets (i.e. SWaT and WADI) are not be available. All other datasets can be found online, following the references in the paper.
-Further preprocessing is needed for IEEECIS, which is done in 'check_data.ipynb'.
+Distribution rights to some datasets (i.e. SWaT and WADI) are not be available, one needs to ask for the data on the iTrust website. All other datasets can be easily downloaded online, following the references in the paper.
 
 
 ## Result Reproduction
@@ -26,7 +25,9 @@ To run a model on a dataset, run the following command:
 ```bash
 python main.py --model <model> --dataset <dataset> --retrain
 ```
-where `<model>` can be either of 'TranAD', 'GDN', 'MAD_GAN', 'MTAD_GAT', 'MSCRED', 'USAD', 'OmniAnomaly', 'LSTM_AD', and dataset can be one of 'SMAP', 'MSL', 'SWaT', 'WADI', 'SMD', 'MSDS', 'MBA', 'UCR' and 'NAB. To train with less data, (maximum of 10k time stamps), use the following command 
+where `<model>` can be either of `iTransformer`, `Transformer`, `TranAD`, `USAD`, `OmniAnomaly` and `LSTM_AE`, and dataset can be one of `creditcard_normal`, `GECCO_normal`, `IEEECIS`, `MSL`, `SMAP`, `SMD`, `SWaT`, `SWaT_1D` `UCR` and `WADI`.
+The `normal` in the file name indicates that only normal data (i.e. no anomalies) are present in the training data.
+To train with less data, (maximum of 10k time stamps), use the following command:
 ```bash
 python3 main.py --model <model> --dataset <dataset> --retrain --less
 ```
