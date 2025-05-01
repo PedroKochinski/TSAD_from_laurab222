@@ -150,6 +150,7 @@ results/*
 studies*/*
 preprocessing/*
 iTransformer*/*
+Transformer*/*
 TranAD*/*
 MAD_GAN*/*
 OmniAnomaly*/*
@@ -163,3 +164,4 @@ None*/*
 *.csv
 data/*
 *.tar
+*.ipynb
