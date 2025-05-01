@@ -7,6 +7,7 @@ lm_d = {
 		'SMD': [(0.99995, 1.04), (0.99995, 1.06)],
 		'synthetic': [(0.999, 1), (0.999, 1)],
 		'SWaT': [(0.993, 1), (0.993, 1)],
+        'SWaT_small': [(0.993, 1), (0.993, 1)],
         'SWaT_1D': [(0.993, 1), (0.993, 1)],
 		'UCR': [(0.993, 1), (0.99935, 1)],
 		'NAB': [(0.991, 1), (0.99, 1)],
@@ -33,6 +34,7 @@ lm_d = {
         'lorenzetti':  [(0.9995, 1.04), (0.99995, 1.06)],
         'creditcard': [(0.9995, 1.04), (0.99995, 1.06)],
         'creditcard_time': [(0.9995, 1.04), (0.99995, 1.06)],
+        'creditcard_normal': [(0.9995, 1.04), (0.99995, 1.06)],
 	}
 lm = lm_d[args.dataset][1 if 'TranAD' in args.model else 0]
 
@@ -41,6 +43,7 @@ lr_d = {
 		'SMD': 0.0001, 
 		'synthetic': 0.0001, 
 		'SWaT': 0.008, 
+        'SWaT_small': 0.008,
         'SWaT_1D': 0.008,
 		'SMAP': 0.001, 
         'SMAP_new': 0.001, 
@@ -67,6 +70,7 @@ lr_d = {
         'lorenzetti': 0.0001,
         'creditcard': 0.0001,
         'creditcard_time': 0.0001,
+        'creditcard_normal': 0.0001,
 	}
 lr = lr_d[args.dataset]
 
@@ -75,6 +79,7 @@ percentiles = {
 		'SMD': (98, 2000),
 		'synthetic': (95, 10),
 		'SWaT': (95, 10),
+        'SWaT_small': (95, 10),
         'SWaT_1D': (95, 10),
 		'SMAP': (97, 5000),
 		'SMAP_new': (97, 5000),
@@ -101,6 +106,7 @@ percentiles = {
         'lorenzetti': (98, 2000),
         'creditcard': (99, 2000),
         'creditcard_time': (99, 2000),
+        'creditcard_normal': (99, 2000),
 	}
 percentile_merlin = percentiles[args.dataset][0]
 cvp = percentiles[args.dataset][1]
