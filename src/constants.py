@@ -52,6 +52,7 @@ percentiles = {
 		'SMD': (98, 2000),
 		'SWaT': (95, 10),
         'SWaT_small': (95, 10),
+        'SWaT_small': (95, 10),
         'SWaT_1D': (95, 10),
 		'SMAP': (97, 5000),
 		'SMAP_new': (97, 5000),

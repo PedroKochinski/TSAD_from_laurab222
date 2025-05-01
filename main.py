@@ -19,7 +19,8 @@ from src.data_loader import MyDataset
 from src.soft_dtw_cuda import SoftDTW
 
 
-def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, lossname='MSE', enc_feats=0, pred=False):
+def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, 
+			 lossname='MSE', enc_feats=0, pred=False, forecasting=False):
 	
 	if 'OmniAnomaly' in model.name:
 		l = nn.MSELoss(reduction = 'mean' if training else 'none')
@@ -139,8 +140,12 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, los
 		n = epoch + 1
 		if training:
 			l1s = []
-			for d in data: # d.shape is [B, window_size, N]
-				local_bs = d.shape[0]
+			for d in data: # d.shape is [B, window_size, N] or d = (dx, dy)
+				if model.name == 'iTransformer' and model.forecasting:	
+					elem = d[1][:, -1, :].view(-1, 1, feats)  # [B, 1, N]
+					d = d[0]								  # [B, window_size, N]
+				else:
+					elem = d
 				if enc_feats > 0:
 					d_enc = d[:, :, :enc_feats]
 					d = d[:, :, enc_feats:]
@@ -151,7 +156,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, los
 					z = model(d, d_enc)[0]
 				else:
 					z = model(d, d_enc)
-				l1 = l(z, d)
+				l1 = l(z, elem)
 				l1s.append(torch.mean(l1).item())
 				loss = torch.mean(l1)
 				optimizer.zero_grad()
@@ -164,7 +169,11 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, los
 			z_all = torch.empty(0)
 			loss = torch.empty(0)
 			for i, d in enumerate(data): # d.shape is [B, window_size, N]
-				local_bs = d.shape[0]
+				if model.name == 'iTransformer' and model.forecasting:	
+					elem = d[1][:, -1, :].view(-1, 1, feats)  # [B, 1, N]
+					d = d[0]								  # [B, window_size, N]
+				else:
+					elem = d
 				if enc_feats > 0:
 					d_enc = d[:, :, :enc_feats]
 					d = d[:, :, enc_feats:]
@@ -174,7 +183,7 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, los
 					z = model(d, d_enc)[0]
 				else:
 					z = model(d, d_enc)
-				l1 = l(z, d)
+				l1 = l(z, elem)
 				loss = torch.cat((loss, l1), dim=0)
 				if pred:
 					z_all = torch.cat((z_all, z), dim=0)
@@ -237,9 +246,9 @@ if __name__ == '__main__':
 	os.makedirs(res_path, exist_ok=True)
 
 	# create data sets
-	train = MyDataset(args.dataset, args.window_size, args.step_size, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=args.k)
-	test = MyDataset(args.dataset, args.window_size, args.window_size, args.model, flag='test', feats=args.feats, less=args.less, enc=args.enc, k=-1)
-	train_test = MyDataset(args.dataset, args.window_size, args.window_size, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=-1)
+	train = MyDataset(args.dataset, args.window_size, args.step_size, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=args.k, forecasting=args.forecasting)
+	test = MyDataset(args.dataset, args.window_size, args.window_size, args.model, flag='test', feats=args.feats, less=args.less, enc=args.enc, k=-1, forecasting=args.forecasting)
+	train_test = MyDataset(args.dataset, args.window_size, args.window_size, args.model, flag='train', feats=args.feats, less=args.less, enc=args.enc, k=-1, forecasting=args.forecasting)
 	labels = test.get_labels()
 	
 	print('train shape with windows:', train.data.shape)
@@ -247,7 +256,7 @@ if __name__ == '__main__':
 	print('labels shape:', labels.shape)
 	
 	if args.k > 0:
-		valid = MyDataset(args.dataset, args.window_size, args.step_size, args.model, flag='valid', feats=args.feats, less=args.less, enc=args.enc, k=args.k)
+		valid = MyDataset(args.dataset, args.window_size, args.step_size, args.model, flag='valid', feats=args.feats, less=args.less, enc=args.enc, k=args.k, forecasting=args.forecasting)
 		print(f'{args.k}-fold valid set', valid.__len__(), valid.data.shape)
 
 	feats = train.feats
@@ -261,7 +270,8 @@ if __name__ == '__main__':
 																d_model=args.d_model, 
 																test=args.test, 
 																checkpoints_path=checkpoints_path, 
-																loss=args.loss)
+																loss=args.loss,
+																forecasting=args.forecasting)
 
 	# Calculate and print the number of parameters
 	total_params = sum(p.numel() for p in model.parameters())
@@ -308,11 +318,11 @@ if __name__ == '__main__':
 			min_lossV = 100
 		num_epochs = args.epochs; e = epoch + 1; start_time = time()
 		for e in tqdm(list(range(epoch+1, epoch+num_epochs+1))):
-			lossT, lr = backprop(e, model, data_loader_train, feats, optimizer, scheduler, 
-						training=True, lossname=args.loss, enc_feats=enc_feats)
+			lossT, lr = backprop(e, model, data_loader_train, feats, optimizer, scheduler, training=True, 
+								lossname=args.loss, enc_feats=enc_feats, forecasting=args.forecasting)
 			if args.k > 0:
-				lossV = backprop(e, model, data_loader_valid, feats, optimizer, scheduler, 
-				training=False, lossname=args.loss, enc_feats=enc_feats)
+				lossV = backprop(e, model, data_loader_valid, feats, optimizer, scheduler, training=False, 
+					 			lossname=args.loss, enc_feats=enc_feats, forecasting=args.forecasting)
 				lossV = np.mean(lossV)
 				if lossV < min_lossV:
 					min_lossV = lossV
@@ -343,10 +353,10 @@ if __name__ == '__main__':
 	print(f'{color.HEADER}Testing {args.model} on {args.dataset}{color.ENDC}')
 
 	### Scores
-	lossT = backprop(-1, model, data_loader_train_test, feats, optimizer, scheduler, 
-				training=False, lossname=args.loss, enc_feats=enc_feats, pred=False)  # need anomaly scores on training data for POT
-	loss, y_pred = backprop(-1, model, data_loader_test, feats, optimizer, scheduler, 
-						training=False, lossname=args.loss, enc_feats=enc_feats, pred=True)
+	lossT = backprop(-1, model, data_loader_train_test, feats, optimizer, scheduler, training=False, 
+				  	lossname=args.loss, enc_feats=enc_feats, pred=False, forecasting=args.forecasting)  # need anomaly scores on training data for POT
+	loss, y_pred = backprop(-1, model, data_loader_test, feats, optimizer, scheduler, training=False, 
+						 lossname=args.loss, enc_feats=enc_feats, pred=True, forecasting=args.forecasting)
 
 	if feats <= 30:
 		testOO = test.get_complete_data_wpadding()
@@ -356,7 +366,7 @@ if __name__ == '__main__':
 	# print(f'check data shapes before removing padding:'
 	#    f'\ntrain loss {lossT.shape}, test loss{loss.shape}, labels {labels.shape}\n')
 
-	if 'iTransformer' in model.name or model.name in ['LSTM_AE', 'Transformer']:
+	if ('iTransformer' in model.name or model.name in ['LSTM_AE', 'Transformer']) and not args.forecasting:
 		# cut out the padding from test data, loss tensors
 		lossT_tmp, loss_tmp, y_pred_tmp = [], [], []
 		# print(test.get_ts_lengths(), np.sum(test.get_ts_lengths()), len(test.get_ts_lengths()))

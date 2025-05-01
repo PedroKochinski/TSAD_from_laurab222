@@ -1,9 +1,10 @@
 import numpy as np
+from sklearn.metrics import *
 
 from src.spot import SPOT
 from src.constants import *
-from sklearn.metrics import *
 from src.plotting import plot_metrics
+
 
 def calc_point2point(predict, actual):
     """

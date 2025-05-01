@@ -2,12 +2,13 @@ import argparse
 
 def parse_arguments() -> argparse.Namespace:
 	parser = argparse.ArgumentParser(description='Time Series Anomaly Detection')
+	parser = argparse.ArgumentParser(description='Time Series Anomaly Detection')
 	
 	# Dataset and model arguments
 	parser.add_argument('--dataset', type=str, required=False, default='GECCO', help="give name of dataset")
 	parser.add_argument('--model', type=str, required=False, default='iTransformer', help="model name")
 	parser.add_argument('--checkpoint', type=str, required=False, default=None, help="path to pretrained model checkpoint folder")
-	
+
 	# Training parameters
 	parser.add_argument('--window_size', '-w', type=int, required=False, default=10, help="number of timestamps in a window")
 	parser.add_argument('--step_size', '-s', type=int, required=False, default=1, help="step size for sliding window")
@@ -21,6 +22,7 @@ def parse_arguments() -> argparse.Namespace:
 	parser.add_argument('--test', action='store_true', help="test the model")
 	parser.add_argument('--retrain', action='store_true', help="retrain the model")
 	parser.add_argument('--less', action='store_true', help="train using less data")
+	parser.add_argument('--forecasting', action='store_true', required=False, help="forecasting AD instead of reconstruction")
 	parser.add_argument('--enc', action='store_true', help="use additional time encoder covariate")
 	parser.add_argument('--shuffle', action='store_true', help="shuffle the train/valid data")
 

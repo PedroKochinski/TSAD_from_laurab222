@@ -13,8 +13,9 @@ file_prefixes = {
 	'UCR': '136_',
 }
 
+
 class MyDataset(Dataset):
-    def __init__(self, dataset, window_size, step_size, modelname, flag='train', feats=-1, less=False, enc=False, k=-1, shuffle=False):
+    def __init__(self, dataset, window_size, step_size, modelname, flag='train', feats=-1, less=False, enc=False, k=-1, shuffle=False, forecasting=False):
         """
         Initializes the data loader with the specified parameters.
         Args:
@@ -22,6 +23,7 @@ class MyDataset(Dataset):
             window_size (int): The size of the window for creating data segments.
             step_size (int): The step size for moving the window.
             modelname (str): The name of the model to be used.
+            forecasting (bool, optional): A flag indicating whether to use forecasting instead of reconstruction. Defaults to False.
             flag (str, optional): The type of data to load (e.g., 'train', 'test'). Defaults to 'train'.
             feats (int, optional): The number of features in the dataset. Defaults to None (then automatically == nb of input features).
             less (bool, optional): A flag indicating whether to load a smaller subset (10k timestamps) of the data. Defaults to False.
@@ -43,6 +45,7 @@ class MyDataset(Dataset):
         self.enc_feats = self.__get_enc_feats__()
         self.shuffle = shuffle
         
+        self.forecasting = forecasting
         self.flag = flag
         self.less = less
         assert k <= 5
@@ -102,9 +105,17 @@ class MyDataset(Dataset):
                     l_paths.append(glob.glob(os.path.join(folder, f'*{l}*.npy'))[0])
             else:
                 l_paths = glob.glob(os.path.join(folder, f'*{labelfile}*.npy'))
+            if self.less and self.data_name in file_prefixes.keys() and isinstance(file_prefixes[self.data_name], list):
+                l_paths = []
+                for l in labelfile_complete:
+                    l_paths.append(glob.glob(os.path.join(folder, f'*{l}*.npy'))[0])
+            else:
+                l_paths = glob.glob(os.path.join(folder, f'*{labelfile}*.npy'))
             labels = np.concatenate([np.load(p) for p in l_paths])
 
         if self.feats > 0:
+            if self.feats > data.shape[1]:
+                self.feats = data.shape[1]
             if self.enc:
                 max_feats = self.feats + self.enc_feats
             else:
@@ -116,6 +127,7 @@ class MyDataset(Dataset):
             self.feats = data.shape[1] - self.enc_feats
 
         if self.less and self.data_name not in file_prefixes.keys():
+            data = data[:10000]
             data = data[:10000]
             ts_lengths = [data.shape[0]]
             if type == 'test':  
@@ -161,6 +173,8 @@ class MyDataset(Dataset):
         ts_lengths = [np.load(p).shape[0] for p in paths]
         
         if self.feats > 0:
+            if self.feats > data.shape[1]:
+                self.feats = data.shape[1]
             if self.enc:
                 max_feats = self.feats + self.enc_feats
             else:
@@ -193,7 +207,7 @@ class MyDataset(Dataset):
         """
 
         ideal_lengths = []
-        if 'iTransformer' in self.modelname or self.modelname in ['LSTM_AE', 'Transformer']: 
+        if ('iTransformer' in self.modelname or self.modelname in ['LSTM_AE', 'Transformer']) and not self.forecasting: 
             windows = np.empty((0, self.window_size, data.shape[1]))
             start = 0
             for l in self.ts_lengths:
@@ -225,10 +239,15 @@ class MyDataset(Dataset):
                 self.feats = windows.shape[1]
 
     def __len__(self):
+        if self.forecasting:
+            return len(self.data) - 1
         return len(self.data)
 
     def __getitem__(self, idx):
         sample = self.data[idx]
+        if self.forecasting:
+            sample_y = self.data[idx+1]
+            return sample, sample_y
         return sample
     
     def get_ts_lengths(self):
@@ -249,6 +268,9 @@ class MyDataset(Dataset):
         # if labels are 1D, repeat them for each feature to have 2D labels
         if self.feats != self.labels.shape[1]:
             self.labels = np.repeat(self.labels, self.feats, axis=1)
+        if self.forecasting:
+            # self.labels = self.labels[self.window_size:] # remove first window_size labels
+            self.labels = self.labels[:-1] # remove last label because of forecasting
         return self.labels
     
     def get_complete_data(self):
@@ -264,11 +286,12 @@ class MyDataset(Dataset):
 
 
 if __name__ == '__main__':
-    dataset = 'SMD'
+    dataset = 'GECCO'
+    fc = True
     # Create dataset
-    train = MyDataset(dataset, window_size=10, step_size=1, modelname='iTransformer', flag='train', feats=30, less=True, enc=False, k=4)
-    valid = MyDataset(dataset, window_size=10, step_size=1, modelname='iTransformer', flag='valid', feats=30, less=True, enc=False, k=4)
-    test = MyDataset(dataset, window_size=10, step_size=1, modelname='iTransformer', flag='test', feats=30, less=True, enc=False, k=-1)
+    train = MyDataset(dataset, window_size=10, step_size=1, modelname='iTransformer', flag='train', feats=30, less=False, enc=False, k=2, forecasting=fc)
+    valid = MyDataset(dataset, window_size=10, step_size=1, modelname='iTransformer', flag='valid', feats=30, less=False, enc=False, k=2, forecasting=fc)
+    test = MyDataset(dataset, window_size=10, step_size=1, modelname='iTransformer', flag='test', feats=30, less=False, enc=False, k=-1, forecasting=fc)
     print(train.__len__(), train.data.shape, train.complete_data.shape)
     print(valid.__len__(), valid.data.shape)
     print(train.get_ts_lengths(), valid.get_ts_lengths())

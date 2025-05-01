@@ -2,7 +2,6 @@
 # README
 
 This repository allows to run and compare multipe time series anomaly detection algorithms and contains implementations
-For forecasting-based anomaly detection, please switch to the branch `forecasting`.
 
 ## Installation
 This code needs Python-3.8 or higher.
@@ -32,7 +31,8 @@ To train with less data, (maximum of 10k time stamps), use the following command
 python3 main.py --model <model> --dataset <dataset> --retrain --less
 ```
 
-When working with forecasting-based anomaly detection, it is necessary to switch to the branch `forecasting` and add the argument `--forecasting` to the command:
+The default is always reconstruction-based anomaly detection.
+When working with forecasting-based anomaly detection, it is necessary to add the argument `--forecasting` to the command:
 ```bash
 python3 main.py --model <model> --dataset <dataset> --retrain --forecasting
 ```

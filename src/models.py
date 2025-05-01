@@ -30,6 +30,7 @@ class LSTM_AE(nn.Module):
 		x = x.permute(0, 2, 1)
 		out1, (h1, c1) = self.lstm(x)
 		latent = h1.repeat(self.window_size, 1, 1)
+		latent = h1.repeat(self.window_size, 1, 1)
 		latent = latent.swapdims(0, 1)
 		out2, (h2, c2) = self.lstm2(latent)
 		out2 = self.fcn(out2)
@@ -151,18 +152,21 @@ class TranAD(nn.Module):
 
 # iTransformer (ICLR 2024)
 class iTransformer(nn.Module):
-	def __init__(self, feats, window_size, d_model=2, loss='MSE'):
+	def __init__(self, feats, window_size, d_model=2, forecasting=False):
 		super(iTransformer, self).__init__()
 		self.name = 'iTransformer'
 		self.lr = 0.0001
 		self.batch = 32  
 		self.n_feats = feats
 		self.window_size = window_size
+		self.n = self.n_feats * self.window_size
 		self.seq_len = self.window_size
 		self.label_len = self.window_size
-		self.pred_len = self.window_size  
-		if loss in ['Huber_quant', 'penalty']:
-			self.pred_len *= 3  # if using combined loss from utils.py
+		self.forecasting = forecasting 		# whether model output should be reconstruction or forecasting of input
+		if self.forecasting:
+			self.pred_len = 1  				# for forecasting-based AD, only want to predict 1 step ahead
+		else:
+			self.pred_len = self.window_size
 		self.output_attention = False
 		self.use_norm = True
 		self.d_model = d_model 
@@ -232,7 +236,7 @@ class iTransformer(nn.Module):
 
 # vanilla transformer for comparison, same structure as iTransformer except for the embedding
 class Transformer(nn.Module):  
-	def __init__(self, feats, window_size, d_model=2, loss='MSE'):
+	def __init__(self, feats, window_size, d_model=2):
 		super(Transformer, self).__init__()
 		self.name = 'Transformer'
 		self.lr = 0.0001
@@ -242,8 +246,6 @@ class Transformer(nn.Module):
 		self.seq_len = self.window_size
 		self.label_len = self.window_size
 		self.pred_len = self.window_size  
-		if loss in ['Huber_quant', 'penalty']:
-			self.pred_len *= 3  # 3* if using combined loss from utils.py
 		self.output_attention = False
 		self.use_norm = True
 		self.d_model = d_model 

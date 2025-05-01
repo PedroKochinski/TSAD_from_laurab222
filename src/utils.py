@@ -37,7 +37,7 @@ def save_model(folder, model, optimizer, scheduler, epoch, accuracy_list, name='
         'accuracy_list': accuracy_list}, file_path)
 
 def load_model(modelname, dataset, dims, window_size, d_model=None, 
-			   test=False, checkpoints_path=None, loss='MSE'):
+			   test=False, checkpoints_path=None, loss='MSE', forecasting=False):
 	""" Load or create a model with the specified parameters.
 		Parameters:
 		modelname (str): The name of the model class to be loaded or created.
@@ -47,6 +47,7 @@ def load_model(modelname, dataset, dims, window_size, d_model=None,
 		test (bool, optional): Whether to test the model. Default is False.
 		checkpoints_path (str, optional): The path to load the model from. Default is None.
 		loss (str, optional): The loss function to be used. Default is 'MSE'.
+		forecasting (bool, optional): Whether to use forecasting mode. Default is False.
 
 		Returns:
 		tuple: A tuple containing the model, optimizer, scheduler, epoch, and accuracy_list.
@@ -57,9 +58,9 @@ def load_model(modelname, dataset, dims, window_size, d_model=None,
 
 	model_class = getattr(src.models, modelname)
 	if modelname == 'iTransformer':
-		model = model_class(dims, window_size, d_model, loss).double()
+		model = model_class(dims, window_size, d_model, forecasting).double()
 	elif modelname == 'Transformer':
-		model = model_class(dims, window_size, d_model, loss).double()
+		model = model_class(dims, window_size, d_model).double()
 	else:
 		model = model_class(dims, window_size).double()
 	optimizer = torch.optim.AdamW(model.parameters() , lr=model.lr, weight_decay=1e-5)
