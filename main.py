@@ -8,9 +8,10 @@ from pprint import pprint
 from torchinfo import summary
 
 from src.models import *
-from src.constants import *
+# from src.constants import *
 from src.plotting import *
 from src.pot import *
+from src.parse_args import parse_arguments
 from src.utils import load_model, save_model
 from src.diagnosis import *
 from src.merlin import *
@@ -457,7 +458,9 @@ def local_anomaly_labels(preds, labels, q=1e-5, plot_path=None, nb_adim=1):
 
 
 if __name__ == '__main__':
-	print(args, '\n')
+	args = parse_arguments()
+	print('Arguments:')
+	pprint(args)
 	print(torch.cuda.is_available())
 
 	# define path for results, checkpoints & plots & create directories

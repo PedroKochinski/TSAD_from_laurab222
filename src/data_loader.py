@@ -118,10 +118,10 @@ class MyDataset(Dataset):
             self.feats = data.shape[1] - self.enc_feats
 
         if self.less and self.data_name not in file_prefixes.keys():
-            data = data[:50000]
+            data = data[:10000]
             ts_lengths = [data.shape[0]]
             if type == 'test':  
-                labels = labels[:50000]
+                labels = labels[:10000]
 
         # 5-fold cross validation
         if not kfold and self.k >= 0 and len(paths) == 1:
