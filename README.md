@@ -19,7 +19,7 @@ python3 preprocess.py creditcard GECCO SMAP MSL SWaT WADI SMD UCR
 Distribution rights to some datasets (i.e. SWaT and WADI) are not be available, one needs to ask for the data on the iTrust website. All other datasets can be easily downloaded online, following the references in the paper.
 
 
-## Result Reproduction
+## Training & Testing
 To run a model on a dataset, run the following command:
 ```bash
 python main.py --model <model> --dataset <dataset> --retrain
@@ -119,6 +119,11 @@ Global results with 9 anomalous dimensions for anomaly
  'train_loss': 0.0804248683839156,
  'train_time': 19.07716202735901}
 ```
+
+## Deterministic Baseline
+The deterministic baseline algorithm which applies POT to the absolute value of the time series, can be found in `Baseline_and_IF.ipynb`. 
+This notebook also contains an implementation of the Isolation Forest algorithm applied to a time series.
+
 
 ## Info
 Part of this repository is based on the code corresponding to the paper "TranAD: Deep Transformer Networks for Anomaly Detection in Multivariate Time Series Data" (S.Tuli et al., VLDB 2022). The code can be found [here](https://github.com/imperial-qore/TranAD). Thanks a lot!
