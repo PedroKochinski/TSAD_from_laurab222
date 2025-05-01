@@ -2,13 +2,7 @@
 # README
 
 This repository allows to run and compare multipe time series anomaly detection algorithms and contains implementations
-For forecasting-based anomaly detection, switch to branch 'forecasting' please.
-
-## Info
-Part of this repository is based on the code corresponding to the paper "TranAD: Deep Transformer Networks for Anomaly Detection in Multivariate Time Series Data" (S.Tuli et al., VLDB 2022). The code can be found [here](https://github.com/imperial-qore/TranAD). Thanks a lot!
-
-The iTransformer model used in this code is based on the implementation [here](https://github.com/thuml/iTransformer), based on the paper "iTransformer: Inverted Transformers Are Effective for Time Series Forecasting" (Y.Liu et al., ICLR 2024).
-
+For forecasting-based anomaly detection, please switch to the branch `forecasting`.
 
 ## Installation
 This code needs Python-3.8 or higher.
@@ -16,6 +10,7 @@ The provided environment.yml file can be used to set up the environment (using c
 ```bash
 conda env create -f environment.yml
 ```
+Otherwise you can also install torch and then the packages from `requirements.txt`.
 
 ## Dataset Preprocessing
 Preprocess all datasets except for IEEECIS using the command
@@ -124,3 +119,7 @@ Global results with 9 anomalous dimensions for anomaly
  'train_time': 19.07716202735901}
 ```
 
+## Info
+Part of this repository is based on the code corresponding to the paper "TranAD: Deep Transformer Networks for Anomaly Detection in Multivariate Time Series Data" (S.Tuli et al., VLDB 2022). The code can be found [here](https://github.com/imperial-qore/TranAD). Thanks a lot!
+
+The iTransformer model used in this code is based on the implementation [here](https://github.com/thuml/iTransformer), based on the paper "iTransformer: Inverted Transformers Are Effective for Time Series Forecasting" (Y.Liu et al., ICLR 2024).

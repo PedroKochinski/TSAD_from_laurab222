@@ -14,7 +14,7 @@ from layers.Embed import DataEmbedding_inverted, DataEmbedding
 
 ## LSTM_AE Model (based on IEEE SOCA 2019, Hsieh et al.)
 class LSTM_AE(nn.Module):
-	def __init__(self, feats, window_size=None):
+	def __init__(self, feats, window_size=10):
 		super(LSTM_AE, self).__init__()
 		self.name = 'LSTM_AE'
 		self.lr = 0.002

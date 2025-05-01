@@ -1,9 +1,7 @@
 pandas
 tqdm
 matplotlib
-# dgl
 numpy
 scikit-learn
 mplhep
-# xlrd==1.2.0
 torchinfo==1.8.0

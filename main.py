@@ -39,8 +39,6 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, los
 			scheduler.step()
 			return loss.item(), optimizer.param_groups[0]['lr']
 		else:
-			# y_preds = torch.empty(0)
-			# loss = torch.empty(0)
 			loss = []; y_preds = []
 			for i, d in enumerate(data):
 				y_pred, _, _, hidden = model(d, hidden if i else None)
