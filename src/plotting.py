@@ -427,7 +427,8 @@ def plot_MSE_vs_ascore(path, ascore, labels):
 			plt.close()
 		pdf.close()
 
-	ascore = np.mean(ascore, axis=1)
+	if ascore.ndim > 1:
+		ascore = np.mean(ascore, axis=1)
 	fig = plt.figure(figsize=(17, 6))
 	plt.scatter(np.arange(len(ascore)), y=ascore, c=labels, label=['Normal data', 'Anomaly'], alpha=0.5, cmap='coolwarm')
 	plt.ylabel('MSE')

@@ -2,7 +2,7 @@ import os, math
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-import torch
+import torch 
 from torch.utils.data import DataLoader
 import torch.nn as nn
 from time import time
@@ -18,6 +18,8 @@ from src.diagnosis import hit_att, ndcg
 from src.data_loader import MyDataset
 from src.soft_dtw_cuda import SoftDTW
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
 
 def backprop(epoch, model, data, feats, optimizer, scheduler, training=True, 
 			 lossname='MSE', enc_feats=0, pred=False, forecasting=False):
@@ -222,7 +224,63 @@ def backprop(epoch, model, data, feats, optimizer, scheduler, training=True,
 				return loss.detach().numpy(), z_all.detach().numpy()
 			else:
 				return loss.detach().numpy()
+
+	elif 'LSTMTriplet' in model.name:
+		triplet_loss_fn = nn.TripletMarginLoss(margin=1.0, p=2)
+
+		if training:
+			losses = []
+			dataset = data.dataset
 			
+			# Get the batch size from the DataLoader
+			batch_size = data.batch_size
+			num_batches = len(data)
+
+			for _ in tqdm(range(num_batches), desc=f"Epoch {epoch} Training"):
+				# Get a whole batch of triplets
+				anchor, positive, negative = dataset.get_triplet(batch_size)
+				
+				# Move the data tensors to the GPU
+				anchor = anchor.to(device)
+				positive = positive.to(device)
+				negative = negative.to(device)
+				
+				# ... (the rest of your training step is the same)
+				optimizer.zero_grad()
+				anchor_emb = model(anchor)
+				positive_emb = model(positive)
+				negative_emb = model(negative)
+				loss = triplet_loss_fn(anchor_emb, positive_emb, negative_emb)
+				losses.append(loss.item())
+				loss.backward()
+				optimizer.step()
+			
+			scheduler.step()
+			return np.mean(losses), optimizer.param_groups[0]['lr']
+
+		else:
+			# For testing, we just need to generate embeddings.
+			# The actual anomaly scoring (distance calculation) will happen in the main script.
+			all_embeddings = []
+			for d in data:
+				# If using a GPU, move tensor to the correct device
+				d = d.to(device)
+				embedding = model(d).detach().cpu()
+				all_embeddings.append(embedding)
+			
+			all_embeddings_tensor = torch.cat(all_embeddings, dim=0)
+			print(f"Shape of embeddings tensor being returned by backprop: {all_embeddings_tensor.shape}")
+
+
+			# The function needs to return a loss array and a prediction array.
+			# We return a dummy loss array, and the real output is the embeddings.
+			dummy_loss = np.zeros((len(all_embeddings_tensor), feats))
+			if pred:
+				return dummy_loss, all_embeddings_tensor.numpy()
+			else:
+				# This case might not be used, but we handle it for consistency.
+				return dummy_loss
+
 
 if __name__ == '__main__':
 	args = parse_arguments()
@@ -272,7 +330,7 @@ if __name__ == '__main__':
 																checkpoints_path=checkpoints_path, 
 																loss=args.loss,
 																forecasting=args.forecasting)
-
+	model.to(device) 
 	# Calculate and print the number of parameters
 	total_params = sum(p.numel() for p in model.parameters())
 	trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -300,8 +358,8 @@ if __name__ == '__main__':
 			f.write(f'ts_lengths valid: {valid.get_ts_lengths()}\n')
 		f.write(f'ts_lengths test: {test.get_ts_lengths()}\n')
 		f.write(f'optimizer: {optimizer}, \nscheduler: {scheduler}\n')
-
 		sample_batch = next(iter(data_loader_train))
+		sample_batch = sample_batch.to(device)
 		f.write('\nModel Summary:\n')
 		if model.name == 'TranAD':
 			window = sample_batch.permute(1, 0, 2)
@@ -318,7 +376,7 @@ if __name__ == '__main__':
 			min_lossV = 100
 		num_epochs = args.epochs; e = epoch + 1; start_time = time()
 		for e in tqdm(list(range(epoch+1, epoch+num_epochs+1))):
-			lossT, lr = backprop(e, model, data_loader_train, feats, optimizer, scheduler, training=True, 
+			lossT, lr = backprop(e, model, data_loader_test, feats, optimizer, scheduler, training=True, 
 								lossname=args.loss, enc_feats=enc_feats, forecasting=args.forecasting)
 			if args.k > 0:
 				lossV = backprop(e, model, data_loader_valid, feats, optimizer, scheduler, training=False, 
@@ -353,57 +411,87 @@ if __name__ == '__main__':
 	print(f'{color.HEADER}Testing {args.model} on {args.dataset}{color.ENDC}')
 
 	### Scores
-	lossT = backprop(-1, model, data_loader_train_test, feats, optimizer, scheduler, training=False, 
-				  	lossname=args.loss, enc_feats=enc_feats, pred=False, forecasting=args.forecasting)  # need anomaly scores on training data for POT
-	loss, y_pred = backprop(-1, model, data_loader_test, feats, optimizer, scheduler, training=False, 
-						 lossname=args.loss, enc_feats=enc_feats, pred=True, forecasting=args.forecasting)
+	# MOVED UP: Create true_labels for all models
+	true_labels = ((np.sum(labels, axis=1) >= 1) + 0).astype(int)
 
-	if feats <= 30:
-		testOO = test.get_complete_data_wpadding()
-		nolabels = np.zeros_like(loss)
-		plotter(plot_path, testOO, y_pred, loss, nolabels, test.get_ideal_lengths(), name='output_padded')
-	
-	# print(f'check data shapes before removing padding:'
-	#    f'\ntrain loss {lossT.shape}, test loss{loss.shape}, labels {labels.shape}\n')
+	if 'LSTMTriplet' in model.name:
+		print("Evaluating LSTMTriplet using prototype-based anomaly scoring.")
+		_, train_embeddings = backprop(-1, model, data_loader_train_test, feats, optimizer, scheduler, training=False, pred=True)
+		normal_prototype = torch.tensor(train_embeddings).mean(dim=0).to(device) # Move prototype to GPU
+		
+		# Get all test embeddings
+		_, test_embeddings = backprop(-1, model, data_loader_test, feats, optimizer, scheduler, training=False, pred=True)
+		test_embeddings = torch.tensor(test_embeddings).to(device) # Move test embeddings to GPU
+
+		# Calculate distances (anomaly scores) on the GPU for speed
+		loss_dist = torch.cdist(test_embeddings, normal_prototype.unsqueeze(0)).cpu()
+		
+		# loss will be our 1D array of anomaly scores for each sample
+		loss = loss_dist.flatten().numpy() # Shape: (44992,)
+		
+		# lossT is the score for the training data
+		train_embeddings = torch.tensor(train_embeddings).to(device)
+		lossT_dist = torch.cdist(train_embeddings, normal_prototype.unsqueeze(0)).cpu()
+		lossT = lossT_dist.flatten().numpy()
+
+		# Create a placeholder y_pred that matches the scores length
+		y_pred = np.zeros_like(loss)
+		num_test_samples = len(test.get_complete_data())
+		loss = loss[:num_test_samples]
+		y_pred = y_pred[:num_test_samples]
+		true_labels = true_labels[:num_test_samples]
+	else:
+		lossT = backprop(-1, model, data_loader_train_test, feats, optimizer, scheduler, training=False, 
+						lossname=args.loss, enc_feats=enc_feats, pred=False, forecasting=args.forecasting)
+		loss, y_pred = backprop(-1, model, data_loader_test, feats, optimizer, scheduler, training=False, 
+							lossname=args.loss, enc_feats=enc_feats, pred=True, forecasting=args.forecasting)
+
 
 	if ('iTransformer' in model.name or model.name in ['LSTM_AE', 'Transformer']) and not args.forecasting:
-		# cut out the padding from test data, loss tensors
 		lossT_tmp, loss_tmp, y_pred_tmp = [], [], []
-		# print(test.get_ts_lengths(), np.sum(test.get_ts_lengths()), len(test.get_ts_lengths()))
-		# print(test.get_ideal_lengths(), np.sum(test.get_ideal_lengths()), len(test.get_ideal_lengths()))
 		start = 0
 		for i, l in enumerate(test.get_ts_lengths()):
 			loss_tmp.append(loss[start:start+l])
 			y_pred_tmp.append(y_pred[start:start+l])
 			start += test.get_ideal_lengths()[i]
-		
 		start = 0
 		for i, l in enumerate(train_test.get_ts_lengths()):
 			lossT_tmp.append(lossT[start:start+l])
 			start += train_test.get_ideal_lengths()[i]
-
 		lossT = np.concatenate(lossT_tmp, axis=0)
 		loss = np.concatenate(loss_tmp, axis=0)
 		y_pred = np.concatenate(y_pred_tmp, axis=0)
 
-	# print(f'Check data shapes after removing padding:'
-	#    f'\ntrain loss {lossT.shape}, test loss{loss.shape}, labels {labels.shape}\n')
 	train_loss = np.mean(lossT)
 	test_loss = np.mean(loss)
 
-	# compress true labels to 1D
-	true_labels = (np.sum(labels, axis=1) >= 1) + 0
+	
+	# This section from your code needs to be adapted for LSTMTriplet
+	if 'LSTMTriplet' in model.name:
+		num_test_samples = len(test.get_complete_data())
+		loss = loss.flatten()[:num_test_samples]
+		lossT = lossT.flatten()
+		true_labels = true_labels[:num_test_samples]
+
+		if feats <= 30:
+			testOO = test.get_complete_data_wpadding()
+			nolabels = np.zeros_like(loss)
+			plotter(plot_path, testOO, y_pred, loss, nolabels, test.get_ideal_lengths(), name='output_padded')
+		
+	# print(f'check data shapes before removing padding:'
+	#    f'\ntrain loss {lossT.shape}, test loss{loss.shape}, labels {labels.shape}\n')
 
 	# plot time series with padding
-	if feats <= 30:
+	elif feats <= 30:
 		testO = test.get_complete_data()
 		plotter(plot_path, testO, y_pred, loss, labels, test.get_ts_lengths(), name='output')
 
 	plot_MSE_vs_ascore(plot_path, loss, true_labels)
 
 	### anomaly labels
-	preds, df_res_local = local_pot(loss, lossT, labels, args.q, plot_path)
-	true_labels = (np.sum(labels, axis=1) >= 1) + 0
+	preds, df_res_local = local_pot(loss.reshape(-1, 1), lossT.reshape(-1, 1), labels, args.q, plot_path)
+
+	true_labels = ((np.sum(labels, axis=1) >= 1) + 0).astype(int)
 	# local anomaly labels
 	labelspred, result_local1 = local_anomaly_labels(preds, true_labels, args.q, plot_path, nb_adim=1)  # inclusive OR
 	majority = math.ceil(labels.shape[1] / 2)	# do majority voting over dimensions for local results instead of inclusive OR
@@ -424,7 +512,7 @@ if __name__ == '__main__':
 
 	# global anomaly labels
 	lossTfinal, lossFinal = np.mean(lossT, axis=1), np.mean(loss, axis=1)
-	true_labels = (np.sum(labels, axis=1) >= 1) + 0
+	true_labels = ((np.sum(labels, axis=1) >= 1) + 0).astype(int)
 	result_global, pred2 = pot_eval(lossTfinal, lossFinal, true_labels, plot_path, f'all_dim', q=args.q)
 	labelspred_glob = (pred2 >= 1) + 0
 	result_global.update(hit_att(loss, labels))

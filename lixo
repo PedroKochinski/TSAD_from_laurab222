@@ -1,0 +1,39 @@
+	elif dataset == 'SWaT':
+		dataset_folder = 'data/SWaT'
+		train = pd.read_csv(os.path.join(dataset_folder, 'SWaT_Dataset_Normal_v1.csv'))
+		test = pd.read_csv(os.path.join(dataset_folder, 'SWaT_Dataset_Attack_v0.csv'))
+		train.columns = train.iloc[0] # set column names as first row
+		train = train.drop(train.index[0]) # drop first row
+		test.columns = test.iloc[0] # set column names as first row
+		test = test.drop(test.index[0]) # drop first row
+		train.columns = train.columns.str.strip()
+		test.columns = test.columns.str.strip()
+		
+		train['Timestamp'] = pd.to_datetime(train['Timestamp'].str.strip(), format='%d/%m/%Y %I:%M:%S %p')
+		test['Timestamp'] = pd.to_datetime(test['Timestamp'].str.strip(), format='%d/%m/%Y %I:%M:%S %p')
+		train.set_index('Timestamp', inplace=True)
+		test.set_index('Timestamp', inplace=True)
+
+		train.dropna(how='all', inplace=True); test.dropna(how='all', inplace=True)
+		train.fillna(0, inplace=True); test.fillna(0, inplace=True)
+
+		test['Normal/Attack'] = test['Normal/Attack'].str.replace(" ", "")
+		labels = test['Normal/Attack']
+		
+		labels = (labels == 'Attack').astype(int)
+		
+		train = train.drop(columns=['Normal/Attack']).astype(float)  # are all 'Normal' anyways
+		test = test.drop(columns=['Normal/Attack']).astype(float)
+		
+		train = train.resample('5s').mean().fillna(0).values
+		test = test.resample('5s').mean().fillna(0).values
+
+		labels = labels.resample('5s').max().fillna(0).astype(int).values # if an attack occurs within the 5s window, label it as an attack
+		scaler = MinMaxScaler()
+		train = scaler.fit_transform(train)
+		test = scaler.transform(test)
+		#train, test = convertNumpy(train, reduce=True), convertNumpy(test, reduce=True) # downsampling, only keep 1/10 of data
+		#labels = labels[::10]  # downsampling, only keep 1/10 of data
+		print(train.shape, test.shape, labels.shape)
+		for file in ['train', 'test', 'labels']:
+			np.save(os.path.join(folder, f'{file}.npy'), eval(file))

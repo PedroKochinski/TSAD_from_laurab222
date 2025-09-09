@@ -1,0 +1,42 @@
+Using device: cuda
+Arguments:
+
+{'checkpoint': None,
+ 'd_model': 2,
+ 'dataset': 'SWaT',
+ 'enc': False,
+ 'epochs': 5,
+ 'f': None,
+ 'feats': -1,
+ 'forecasting': False,
+ 'k': -1,
+ 'less': False,
+ 'loss': 'MSE',
+ 'model': 'LSTMTriplet',
+ 'name': None,
+ 'q': 1e-05,
+ 'retrain': True,
+ 'shuffle': False,
+ 'step_size': 1,
+ 'test': False,
+ 'window_size': 10}
+
+CUDA available: True
+MPS (Apple Silicon GPU) is available: False 
+
+train shape with windows: (49500, 510)
+test shape with windows: (44992, 510)
+labels shape: (44992, 510)
+[92mCreating new model: LSTMTriplet[0m
+total params: 147456, trainable params: 147456
+[95mTraining LSTMTriplet on SWaT[0m
+Epoch 0,	L_train = 0.9775994157522565, 		L_valid = 0, 	LR = 0.002
+Epoch 1,	L_train = 0.9566840136328428, 		L_valid = 0, 	LR = 0.002
+Epoch 2,	L_train = 0.9573888758878897, 		L_valid = 0, 	LR = 0.002
+Epoch 3,	L_train = 0.9801450734916162, 		L_valid = 0, 	LR = 0.002
+Epoch 4,	L_train = 1.000030262680458, 		L_valid = 0, 	LR = 0.0018000000000000002
+[1mTraining time:    44.0470 s or 0.73 min [0m
+[95mTesting LSTMTriplet on SWaT[0m
+Evaluating LSTMTriplet using prototype-based anomaly scoring.
+Shape of embeddings tensor being returned by backprop: torch.Size([1547, 64])
+Shape of embeddings tensor being returned by backprop: torch.Size([1406, 64])

@@ -2,7 +2,7 @@ import os
 import sys
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import StandardScaler, OneHotEncoder  
+from sklearn.preprocessing import MinMaxScaler, StandardScaler, OneHotEncoder  
 from src.folderconstants import *
 
 
@@ -47,7 +47,7 @@ def convertNumpy(df, reduce=False):
 		x = df.values[::10, :]  # downsampling, only keep 1/10 of data
 	else:
 		x = df.values
-	return (x - x.min(0)) / (x.ptp(0) + 1e-4)
+	return (x - x.min(0)) / (np.ptp(x, axis=0) + 1e-4)
 
 def load_data(dataset):
 	folder = os.path.join(output_folder, dataset)
@@ -333,14 +333,25 @@ def load_data(dataset):
 			np.save(os.path.join(folder, f'{file}.npy'), eval(file))
 	elif dataset == 'SWaT':
 		dataset_folder = 'data/SWaT'
-		train = pd.read_csv(os.path.join(dataset_folder, 'SWaT_Dataset_Normal_v1.csv'), delimiter=';', decimal=',')
-		test = pd.read_csv(os.path.join(dataset_folder, 'SWaT_Dataset_Attack_v0.csv'), delimiter=';', decimal=',')
+		train = pd.read_csv(os.path.join(dataset_folder, 'SWaT_Dataset_Normal_v1.csv'))
+		test = pd.read_csv(os.path.join(dataset_folder, 'SWaT_Dataset_Attack_v0.csv'))
+		train.columns = train.iloc[0] # set column names as first row
+		train = train.drop(train.index[0]) # drop first row
+		test.columns = test.iloc[0] # set column names as first row
+		test = test.drop(test.index[0]) # drop first row
+		train.columns = train.columns.str.strip()
+		test.columns = test.columns.str.strip()
+	
 		train.dropna(how='all', inplace=True); test.dropna(how='all', inplace=True)
 		train.fillna(0, inplace=True); test.fillna(0, inplace=True)
+
+		test['Normal/Attack'] = test['Normal/Attack'].str.replace(" ", "")
 		labels = test['Normal/Attack']
+		
 		labels = (labels == 'Attack').astype(int)
-		train = train.drop(columns=['Normal/Attack', 'Timestamp'])  # are all 'Normal' anyways
-		test = test.drop(columns=['Normal/Attack', 'Timestamp'])
+		
+		train = train.drop(columns=['Normal/Attack', 'Timestamp']).astype(float)  # are all 'Normal' anyways
+		test = test.drop(columns=['Normal/Attack', 'Timestamp']).astype(float)
 		train, test = convertNumpy(train, reduce=True), convertNumpy(test, reduce=True) # downsampling, only keep 1/10 of data
 		labels = labels[::10]  # downsampling, only keep 1/10 of data
 		print(train.shape, test.shape, labels.shape)
@@ -355,10 +366,10 @@ def load_data(dataset):
 		train.fillna(0, inplace=True); test.fillna(0, inplace=True)
 		labels = test["AttackLABLE (1:No Attack, -1:Attack)"]
 		test = test.drop(columns=["AttackLABLE (1:No Attack, -1:Attack)"])
-		train, test = convertNumpy(train, reduce=True), convertNumpy(test, reduce=True) # downsampling, only keep 1/10 of data
+		train, test = convertNumpy(train, reduce=False), convertNumpy(test, reduce=False) # downsampling, only keep 1/10 of data
 		labels = labels.values  # 1 for normal, -1 for attack, but want 0 for normal, 1 for attack
 		labels = (1 - labels) / 2
-		labels = labels[::10]  # downsampling, only keep 1/10 of data
+		#labels = labels[::10]  # downsampling, only keep 1/10 of data
 		print(train.shape, test.shape, labels.shape)
 		for file in ['train', 'test', 'labels']:
 			np.save(os.path.join(folder, f'{file}.npy'), eval(file))

@@ -4,7 +4,7 @@ import glob
 import numpy as np
 from src.folderconstants import *
 from torch.utils.data import Dataset, DataLoader
-
+import torch
 
 file_prefixes = {
 	'SMD': ['machine-1-1_', 'machine-2-1_', 'machine-3-2_', 'machine-3-7_'],
@@ -13,7 +13,14 @@ file_prefixes = {
 	'UCR': '136_',
 }
 
-
+def create_window_labels(labels, window_size, step_size):
+    """Creates labels for windows."""
+    window_labels = []
+    for i in range(0, len(labels) - window_size + 1, step_size):
+        window = labels[i:i + window_size]
+        # A window is anomalous if any point within it is an anomaly
+        window_labels.append(1 if np.any(window == 1) else 0)
+    return np.array(window_labels)
 class MyDataset(Dataset):
     def __init__(self, dataset, window_size, step_size, modelname, flag='train', feats=-1, less=False, enc=False, k=-1, shuffle=False, forecasting=False):
         """
@@ -61,6 +68,50 @@ class MyDataset(Dataset):
         self.complete_data = self.data
         if self.window_size > 0:
             self.__make_windows__(self.data)
+            # After making windows, create corresponding labels for them
+            if hasattr(self, 'labels'):
+                # Note: This simple windowing for labels assumes step_size=1
+                # A more robust implementation would match the logic in __make_windows__
+                raw_labels = (np.sum(self.labels, axis=1) >= 1) + 0
+                self.window_labels = create_window_labels(raw_labels, self.window_size, self.step_size)
+                # Ensure window_labels and data have the same length
+                num_windows = len(self.data)
+                self.window_labels = self.window_labels[:num_windows]
+
+    def __getitem__(self, index):
+            # We'll use a new method for triplet selection during training
+            # This will be called from the main training loop.
+            # This original __getitem__ method can be kept for testing/inference
+            return self.data[index]
+
+    def get_triplet(self, batch_size):
+        """
+        Selects a batch of anchors, positives, and negatives for triplet loss.
+        """
+        # Use the newly created window_labels for sampling
+        if not hasattr(self, 'window_labels'):
+            raise ValueError("Dataset does not have window_labels. Ensure labels are loaded for the dataset used for training.")
+
+        normal_indices = np.where(self.window_labels == 0)[0]
+        anomaly_indices = np.where(self.window_labels == 1)[0]
+        
+        # ... (the rest of the function is the same as before)
+        anchor_idx = np.random.choice(normal_indices, batch_size)
+        positive_idx = np.random.choice(normal_indices, batch_size)
+        negative_idx = np.random.choice(anomaly_indices, batch_size)
+
+        anchor = self.data[anchor_idx]
+        positive = self.data[positive_idx]
+        negative = self.data[negative_idx]
+        
+        anchor = torch.from_numpy(anchor)
+        positive = torch.from_numpy(positive)
+        negative = torch.from_numpy(negative)
+
+        return anchor, positive, negative
+
+
+
 
     def __load_data__(self, type='train'):
         folder = os.path.join(output_folder, self.data_name)

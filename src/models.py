@@ -18,7 +18,7 @@ class LSTM_AE(nn.Module):
 		super(LSTM_AE, self).__init__()
 		self.name = 'LSTM_AE'
 		self.lr = 0.002
-		self.batch = 100
+		self.batch = 1 # originally 100, but for triplet loss we use batch size of 1 because its one triplet at a time
 		self.n_feats = feats
 		self.n_hidden = 64
 		self.window_size = window_size
@@ -30,12 +30,47 @@ class LSTM_AE(nn.Module):
 		x = x.permute(0, 2, 1)
 		out1, (h1, c1) = self.lstm(x)
 		latent = h1.repeat(self.window_size, 1, 1)
-		latent = h1.repeat(self.window_size, 1, 1)
 		latent = latent.swapdims(0, 1)
 		out2, (h2, c2) = self.lstm2(latent)
 		out2 = self.fcn(out2)
 		outputs = out2
 		return outputs
+
+	
+class LSTMTriplet(nn.Module):
+	def __init__(self, feats, window_size=10):
+		super(LSTMTriplet, self).__init__()
+		self.name = 'LSTMTriplet'
+		self.lr = 0.002
+		self.batch = 32 # Can be increased from 1 for better performance
+		self.n_feats = feats
+		self.n_hidden = 64
+		self.window_size = window_size
+		
+        # Note: A more standard LSTM setup for multivariate time series is input_size=self.n_feats.
+        # Your current setup with input_size=self.window_size treats each feature as a separate sequence.
+        # This implementation will stick to your original structure.
+		self.lstm = nn.LSTM(input_size=self.n_feats, hidden_size=self.n_hidden, num_layers=1, batch_first=True)
+
+	def forward(self, x):
+		"""
+		This forward pass generates an embedding for a given input window x.
+		Input x shape: [batch_size, window_size, n_feats]
+		"""
+		if x.dim() == 2:
+			x = x.unsqueeze(0)
+			
+		#x = x.permute(0, 2, 1) # Switches to [batch_size, n_feats, window_size] as in your original code
+		
+		# We only need the final hidden state from the LSTM as our embedding.
+		# The output is (output, (hidden_state, cell_state))
+		_, (hidden_state, _) = self.lstm(x)
+		
+		# Squeeze to remove the 'num_layers' dimension, resulting in an embedding of shape [batch_size, n_hidden]
+		embedding = hidden_state.squeeze(0)
+		return embedding
+
+
 
 ## OmniAnomaly Model (KDD 19)
 class OmniAnomaly(nn.Module):

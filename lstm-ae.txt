@@ -1,0 +1,244 @@
+Arguments:
+
+{'checkpoint': None,
+ 'd_model': 2,
+ 'dataset': 'SWaT',
+ 'enc': False,
+ 'epochs': 5,
+ 'f': None,
+ 'feats': -1,
+ 'forecasting': False,
+ 'k': -1,
+ 'less': False,
+ 'loss': 'MSE',
+ 'model': 'LSTM_AE',
+ 'name': None,
+ 'q': 1e-05,
+ 'retrain': True,
+ 'shuffle': False,
+ 'step_size': 1,
+ 'test': False,
+ 'window_size': 10}
+
+CUDA available: True
+MPS (Apple Silicon GPU) is available: False 
+
+train shape with windows: (49491, 10, 51)
+test shape with windows: (4500, 10, 51)
+labels shape: (44992, 51)
+[92mCreating new model: LSTM_AE[0m
+total params: 56051, trainable params: 56051
+[95mTraining LSTM_AE on SWaT[0m
+Epoch 0,	L_train = 0.04088059313228491, 		L_valid = 0, 	LR = 0.002
+Epoch 1,	L_train = 0.03307026181481923, 		L_valid = 0, 	LR = 0.002
+Epoch 2,	L_train = 0.03314825725377309, 		L_valid = 0, 	LR = 0.002
+Epoch 3,	L_train = 0.03321683886898475, 		L_valid = 0, 	LR = 0.002
+Epoch 4,	L_train = 0.03324843912659573, 		L_valid = 0, 	LR = 0.0018000000000000002
+[1mTraining time:    95.0051 s or 1.58 min [0m
+[95mTesting LSTM_AE on SWaT[0m
+[95mLocal results with 1 anomalous dimensions for anomaly[0m
+{'FN': np.int64(0),
+ 'FP': np.int64(38959),
+ 'MCC': np.float64(0.04194541906069559),
+ 'ROC/AUC': np.float64(0.5071475559153932),
+ 'TN': np.int64(565),
+ 'TP': np.int64(5468),
+ 'detection level q': 1e-05,
+ 'f1': np.float64(0.21917832691173336),
+ 'precision': np.float64(0.12307830820827913),
+ 'recall': np.float64(0.9999999981711778)}
+[95mLocal results with 26 anomalous dimensions for anomaly[0m
+{'FN': np.int64(5468),
+ 'FP': np.int64(0),
+ 'MCC': 0.0,
+ 'ROC/AUC': np.float64(0.5),
+ 'TN': np.int64(39524),
+ 'TP': np.int64(0),
+ 'detection level q': 1e-05,
+ 'f1': np.float64(0.0),
+ 'precision': np.float64(0.0),
+ 'recall': np.float64(0.0)}
+[95mLocal results with 1 anomalous dimensions for anomaly[0m
+{'FN': np.int64(0),
+ 'FP': np.int64(38959),
+ 'MCC': np.float64(0.04194541906069559),
+ 'ROC/AUC': np.float64(0.5071475559153932),
+ 'TN': np.int64(565),
+ 'TP': np.int64(5468),
+ 'detection level q': 1e-05,
+ 'f1': np.float64(0.21917832691173336),
+ 'precision': np.float64(0.12307830820827913),
+ 'recall': np.float64(0.9999999981711778)}
+[95mLocal results with 2 anomalous dimensions for anomaly[0m
+{'FN': np.int64(0),
+ 'FP': np.int64(32970),
+ 'MCC': np.float64(0.15358777006621602),
+ 'ROC/AUC': np.float64(0.5829116486185608),
+ 'TN': np.int64(6554),
+ 'TP': np.int64(5468),
+ 'detection level q': 1e-05,
+ 'f1': np.float64(0.24907539414700244),
+ 'precision': np.float64(0.14225506005977026),
+ 'recall': np.float64(0.9999999981711778)}
+[95mLocal results with 3 anomalous dimensions for anomaly[0m
+{'FN': np.int64(0),
+ 'FP': np.int64(23906),
+ 'MCC': np.float64(0.2712157908450564),
+ 'ROC/AUC': np.float64(0.6975761562594879),
+ 'TN': np.int64(15618),
+ 'TP': np.int64(5468),
+ 'detection level q': 1e-05,
+ 'f1': np.float64(0.3138714137286408),
+ 'precision': np.float64(0.18615101784361987),
+ 'recall': np.float64(0.9999999981711778)}
+[95mLocal results with 4 anomalous dimensions for anomaly[0m
+{'FN': np.int64(0),
+ 'FP': np.int64(14985),
+ 'MCC': np.float64(0.4074119175548167),
+ 'ROC/AUC': np.float64(0.8104316364740412),
+ 'TN': np.int64(24539),
+ 'TP': np.int64(5468),
+ 'detection level q': 1e-05,
+ 'f1': np.float64(0.4218939740591569),
+ 'precision': np.float64(0.2673446436868212),
+ 'recall': np.float64(0.9999999981711778)}
+[95mLocal results with 5 anomalous dimensions for anomaly[0m
+{'FN': np.int64(0),
+ 'FP': np.int64(7685),
+ 'MCC': np.float64(0.578696834894314),
+ 'ROC/AUC': np.float64(0.9027805890092095),
+ 'TN': np.int64(31839),
+ 'TP': np.int64(5468),
+ 'detection level q': 1e-05,
+ 'f1': np.float64(0.5872897665018536),
+ 'precision': np.float64(0.41572264850929624),
+ 'recall': np.float64(0.9999999981711778)}
+[95mLocal results with 6 anomalous dimensions for anomaly[0m
+{'FN': np.int64(113),
+ 'FP': np.int64(3603),
+ 'MCC': np.float64(0.7267436332037108),
+ 'ROC/AUC': np.float64(0.9440872535328418),
+ 'TN': np.int64(35921),
+ 'TP': np.int64(5355),
+ 'detection level q': 1e-05,
+ 'f1': np.float64(0.7424048299709879),
+ 'precision': np.float64(0.5977896845302638),
+ 'recall': np.float64(0.9793343069141656)}
+[95mLocal results with 7 anomalous dimensions for anomaly[0m
+{'FN': np.int64(353),
+ 'FP': np.int64(1180),
+ 'MCC': np.float64(0.8529793243086867),
+ 'ROC/AUC': np.float64(0.9527936485879107),
+ 'TN': np.int64(38344),
+ 'TP': np.int64(5115),
+ 'detection level q': 1e-05,
+ 'f1': np.float64(0.8696711262988405),
+ 'precision': np.float64(0.8125496412826853),
+ 'recall': np.float64(0.9354425732709536)}
+[95mLocal results with 8 anomalous dimensions for anomaly[0m
+{'FN': np.int64(475),
+ 'FP': np.int64(508),
+ 'MCC': np.float64(0.8979485315240662),
+ 'ROC/AUC': np.float64(0.9501389967830054),
+ 'TN': np.int64(39016),
+ 'TP': np.int64(4993),
+ 'detection level q': 1e-05,
+ 'f1': np.float64(0.9103788073288298),
+ 'precision': np.float64(0.9076531523220267),
+ 'recall': np.float64(0.9131309420023209)}
+[95mLocal results with 9 anomalous dimensions for anomaly[0m
+{'FN': np.int64(860),
+ 'FP': np.int64(387),
+ 'MCC': np.float64(0.8663066072819406),
+ 'ROC/AUC': np.float64(0.9164648842069196),
+ 'TN': np.int64(39137),
+ 'TP': np.int64(4608),
+ 'detection level q': 1e-05,
+ 'f1': np.float64(0.8808131295607146),
+ 'precision': np.float64(0.9225225206756307),
+ 'recall': np.float64(0.8427212859496686)}
+[95mLocal results with 10 anomalous dimensions for anomaly[0m
+{'FN': np.int64(1060),
+ 'FP': np.int64(297),
+ 'MCC': np.float64(0.8527628438698877),
+ 'ROC/AUC': np.float64(0.8993152105520212),
+ 'TN': np.int64(39227),
+ 'TP': np.int64(4408),
+ 'detection level q': 1e-05,
+ 'f1': np.float64(0.8666027134662734),
+ 'precision': np.float64(0.936875662195801),
+ 'recall': np.float64(0.8061448412469919)}
+[95mLocal results with 20 anomalous dimensions for anomaly[0m
+{'FN': np.int64(1755),
+ 'FP': np.int64(0),
+ 'MCC': np.float64(0.806332348265818),
+ 'ROC/AUC': np.float64(0.8395208485735186),
+ 'TN': np.int64(39524),
+ 'TP': np.int64(3713),
+ 'detection level q': 1e-05,
+ 'f1': np.float64(0.8088395334361531),
+ 'precision': np.float64(0.99999999730676),
+ 'recall': np.float64(0.6790416959051908)}
+[95mLocal results with 30 anomalous dimensions for anomaly[0m
+{'FN': np.int64(5468),
+ 'FP': np.int64(0),
+ 'MCC': 0.0,
+ 'ROC/AUC': np.float64(0.5),
+ 'TN': np.int64(39524),
+ 'TP': np.int64(0),
+ 'detection level q': 1e-05,
+ 'f1': np.float64(0.0),
+ 'precision': np.float64(0.0),
+ 'recall': np.float64(0.0)}
+[95mLocal results with 40 anomalous dimensions for anomaly[0m
+{'FN': np.int64(5468),
+ 'FP': np.int64(0),
+ 'MCC': 0.0,
+ 'ROC/AUC': np.float64(0.5),
+ 'TN': np.int64(39524),
+ 'TP': np.int64(0),
+ 'detection level q': 1e-05,
+ 'f1': np.float64(0.0),
+ 'precision': np.float64(0.0),
+ 'recall': np.float64(0.0)}
+[95mLocal results with 50 anomalous dimensions for anomaly[0m
+{'FN': np.int64(5468),
+ 'FP': np.int64(0),
+ 'MCC': 0.0,
+ 'ROC/AUC': np.float64(0.5),
+ 'TN': np.int64(39524),
+ 'TP': np.int64(0),
+ 'detection level q': 1e-05,
+ 'f1': np.float64(0.0),
+ 'precision': np.float64(0.0),
+ 'recall': np.float64(0.0)}
+[95mLocal results with 51 anomalous dimensions for anomaly[0m
+{'FN': np.int64(5468),
+ 'FP': np.int64(0),
+ 'MCC': 0.0,
+ 'ROC/AUC': np.float64(0.5),
+ 'TN': np.int64(39524),
+ 'TP': np.int64(0),
+ 'detection level q': 1e-05,
+ 'f1': np.float64(0.0),
+ 'precision': np.float64(0.0),
+ 'recall': np.float64(0.0)}
+[95mGlobal results with 51 anomalous dimensions for anomaly[0m
+{'FN': np.int64(1274),
+ 'FP': np.int64(139),
+ 'Hit@100%': np.float64(1.0),
+ 'Hit@150%': np.float64(1.0),
+ 'MCC': np.float64(0.8456215475876226),
+ 'NDCG@100%': np.float64(1.0000000000000002),
+ 'NDCG@150%': np.float64(1.0000000000000002),
+ 'ROC/AUC': np.float64(0.8817455981483234),
+ 'TN': np.int64(39385),
+ 'TP': np.int64(4194),
+ 'detection_level_q': 1e-05,
+ 'f1': np.float64(0.8558261029846588),
+ 'precision': np.float64(0.967920607043802),
+ 'recall': np.float64(0.767008045415128),
+ 'test_loss': np.float64(0.08491679312985725),
+ 'threshold': np.float64(0.13857680629123947),
+ 'train_loss': np.float64(0.04104724236690158),
+ 'train_time': 95.00511479377747}
